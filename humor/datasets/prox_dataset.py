@@ -187,6 +187,11 @@ class ProxDataset(Dataset):
         img_path_list = []
         subseq_idx_list = [] # sub index into the recording
         seq_intervals = []
+
+        # start = 21
+        # end = 23
+        # recording_list, recording_names = recording_list[start:end], recording_names[start:end]
+
         for rec_path, rec_name in zip(recording_list, recording_names):
             img_folder = osp.join(rec_path, 'Color')
             img_paths = [osp.join(img_folder, img_fn)
