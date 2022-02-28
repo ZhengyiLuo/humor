@@ -333,6 +333,7 @@ def main(args, config_file):
         body_model_path = args.smpl
         fit_gender = body_model_path.split('/')[-2]
         num_betas = 16 if 'betas' not in gt_data else gt_data['betas'].size(2)
+        
         body_model = BodyModel(bm_path=body_model_path,
                                 num_betas=num_betas,
                                 batch_size=cur_batch_size*T,

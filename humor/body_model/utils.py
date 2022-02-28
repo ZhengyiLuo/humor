@@ -8,10 +8,14 @@ SMPL_JOINTS = {'hips' : 0, 'leftUpLeg' : 1, 'rightUpLeg' : 2, 'spine' : 3, 'left
                 'leftForeArm' : 18, 'rightForeArm' : 19, 'leftHand' : 20, 'rightHand' : 21}
 SMPL_PARENTS = [-1, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 12, 12, 13, 14, 16, 17, 18, 19]
 
-SMPLH_PATH = './body_models/smplh'
-SMPLX_PATH = './body_models/smplx'
-SMPL_PATH = './body_models/smpl'
-VPOSER_PATH = './body_models/vposer_v1_0'
+# SMPLH_PATH = './body_models/smplh'
+# SMPLX_PATH = './body_models/smplx'
+# SMPL_PATH = './body_models/smpl'
+# VPOSER_PATH = './body_models/vposer_v1_0'
+SMPLH_PATH = '/hdd/zen/dev/copycat/Copycat/data/smpl/smplh/'
+SMPLX_PATH = '/hdd/zen/dev/copycat/Copycat/data/smpl/smplx/'
+SMPL_PATH = '/hdd/zen/dev/copycat/Copycat/data/smpl/smpl/'
+VPOSER_PATH = '/hdd/zen/data/SMPL/smpl_models/vposer_v1_0'
 
 # chosen virtual mocap markers that are "keypoints" to work with
 KEYPT_VERTS = [4404, 920, 3076, 3169, 823, 4310, 1010, 1085, 4495, 4569, 6615, 3217, 3313, 6713,

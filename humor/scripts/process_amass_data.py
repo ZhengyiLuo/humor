@@ -74,7 +74,8 @@ def debug_viz_seq(body, fps, contacts=None):
 def get_body_model_sequence(smplh_path, gender, num_frames,
                   pose_body, pose_hand, betas, root_orient, trans):
     gender = str(gender)
-    bm_path = os.path.join(smplh_path, gender + '/model.npz')
+    # bm_path = os.path.join(smplh_path, gender + '/model.npz')
+    bm_path = os.path.join(smplh_path,  f'smplh_{gender}'.upper() + '.npz')
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     bm = BodyModel(bm_path=bm_path, num_betas=NUM_BETAS, batch_size=num_frames).to(device)
 
@@ -628,10 +629,10 @@ def main(config):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--amass-root', type=str, default='./data/amass_raw', help='Root directory of raw AMASS dataset.')
+    parser.add_argument('--amass-root', type=str, default='/hdd/zen/data/ActBound/AMASS/AMASS_Complete/', help='Root directory of raw AMASS dataset.')
     parser.add_argument('--datasets', type=str, nargs='+', default=ALL_DATASETS, help='Which datasets to process. By default processes all.')
     parser.add_argument('--out', type=str, default='./data/amass_processed', help='Root directory to save processed output to.')
-    parser.add_argument('--smplh-root', type=str, default='./body_models/smplh', help='Root directory of the SMPL+H body model.')
+    parser.add_argument('--smplh-root', type=str, default='/hdd/zen/dev/copycat/Copycat/data/smpl/smplh/', help='Root directory of the SMPL+H body model.')
 
     config = parser.parse_known_args()
     config = config[0]

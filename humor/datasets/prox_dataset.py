@@ -1,3 +1,7 @@
+import numpy as np
+import torch
+import cv2
+import math
 import sys, os
 cur_file_path = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.join(cur_file_path, '..'))
@@ -10,10 +14,6 @@ from torch.utils.data import Dataset, DataLoader
 from utils.transforms import batch_rodrigues, rotation_matrix_to_angle_axis
 
 from fitting.fitting_utils import read_keypoints, resize_points, OP_FLIP_MAP, load_planercnn_res
-
-import numpy as np
-import torch
-import cv2
 
 TRIM_EDGES = 90 # number of frames to cut off beginning and end of qualitative
 
@@ -153,8 +153,11 @@ class ProxDataset(Dataset):
         data_splits = QUANT_SPLITS if self.quant else QUAL_SPLITS
         self.split_scenes = data_splits[0] if self.split == 'train' else data_splits[1]
 
+        self.overlap_len = 10
+
         # load (img) data paths 
-        self.img_paths, self.subseq_inds = self.load_data()
+        self.img_paths, self.subseq_inds, self.seq_intervals = self.load_data()
+        
         self.data_len = len(self.img_paths)
         print('This split contains %d sub-sequences...' % (self.data_len))
 
@@ -183,6 +186,7 @@ class ProxDataset(Dataset):
         # split each recording into sequences and record information for loading data
         img_path_list = []
         subseq_idx_list = [] # sub index into the recording
+        seq_intervals = []
         for rec_path, rec_name in zip(recording_list, recording_names):
             img_folder = osp.join(rec_path, 'Color')
             img_paths = [osp.join(img_folder, img_fn)
@@ -204,6 +208,26 @@ class ProxDataset(Dataset):
 
             # split into max number of sequences of desired length
             num_seqs = cur_rec_len // self.seq_len
+            ####################################################################################################
+            seq_interval = []
+            num_frames = len(img_paths)
+            num_seqs = math.ceil((num_frames - self.overlap_len) / (self.seq_len - self.overlap_len))
+            repeat = self.seq_len*num_seqs - self.overlap_len*(num_seqs-1) - num_frames # number of extra frames we cover
+            extra_o = repeat // (num_seqs - 1) # we increase the overlap to avoid these as much as possible
+            overlap_len = self.overlap_len + extra_o
+            new_cov = self.seq_len*num_seqs - overlap_len*(num_seqs-1) # now compute how many frames are still left to account for
+            r = new_cov - num_frames
+            cur_s = 0
+            cur_e = cur_s + self.seq_len
+            for int_idx in range(num_seqs):
+                seq_interval.append((cur_s, cur_e))
+                cur_overlap = self.overlap_len
+                if int_idx < r:
+                    cur_overlap += 1 # update to account for final remainder
+                cur_s += (self.seq_len - cur_overlap)
+                cur_e = cur_s + self.seq_len
+            
+            ####################################################################################################
 
             if self.recording_subseq_idx > -1:
                 sidx = self.recording_subseq_idx*self.seq_len
@@ -212,13 +236,20 @@ class ProxDataset(Dataset):
                 img_path_list.append(seq_paths)
                 subseq_idx_list.append(self.recording_subseq_idx)
             else:
-                for i in range(num_seqs):
-                    sidx = i*self.seq_len
-                    eidx = sidx + self.seq_len
+                # for i in range(num_seqs):
+                #     sidx = i*self.seq_len
+                #     eidx = sidx + self.seq_len
+                #     seq_paths = img_paths[sidx:eidx]
+                #     img_path_list.append(seq_paths)
+                #     subseq_idx_list.append(i)
+
+                for i, (sidx, eidx) in enumerate(seq_interval):
                     seq_paths = img_paths[sidx:eidx]
                     img_path_list.append(seq_paths)
                     subseq_idx_list.append(i)
-        return img_path_list, subseq_idx_list
+            seq_intervals += seq_interval
+            
+        return img_path_list, subseq_idx_list, seq_intervals
 
     def get_data_paths_from_img(self, img_paths):
         # return paths for all other data modalities from the img_paths for a sequence
@@ -433,9 +464,9 @@ class ProxDataset(Dataset):
         gt_data['name'] = cur_name
         gt_data['gender'] = gender
 
+        obs_data['seq_interval'] = torch.Tensor(list(self.seq_intervals[idx])).to(torch.int)
+        gt_data['betas'] = torch.cat([gt_data['betas'], torch.zeros((gt_data['betas'].shape[0], 6))], dim = 1)
         return obs_data, gt_data
-
-
 #
 # Adapted from https://github.com/mohamedhassanmus/prox/blob/master/prox/projection_utils.py
 # Please see their license for usage restrictions.
