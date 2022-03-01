@@ -90,7 +90,6 @@ def convert_to_rotmat(pred_rot, rep="aa"):
         pred_rot_mat = rot9d_to_rotmat(pred_rot.reshape(-1, 9))
     return pred_rot_mat.reshape((B, T, -1))
 
-
 #
 # Many of these functions taken from https://github.com/mkocabas/VIBE/blob/a859e45a907379aa2fba65a7b620b4a2d65dcf1b/lib/utils/geometry.py
 # Please see their license for usage restrictions.

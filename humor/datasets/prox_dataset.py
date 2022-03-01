@@ -49,6 +49,36 @@ FEMALE_SUBJ_IDS = [162, 3452, 159, 3403]
 DEPTH_SCALE = 1e-3
 IMG_WIDTH, IMG_HEIGHT = 1920, 1080
 
+
+from skimage.util.shape import view_as_windows
+def get_chunk_selects(chunk_idxes, last_chunk, window_size = 80, overlap = 10):
+    shift = window_size - int(overlap/2)
+    chunck_selects = []
+    for i in range(len(chunk_idxes)):
+        chunk_idx = chunk_idxes[i]
+        if i == 0:
+            chunck_selects.append((0, shift))
+        elif i == len(chunk_idxes) - 1:
+            chunck_selects.append((-last_chunk, window_size))
+        else:
+            chunck_selects.append((int(overlap/2), shift))
+    return chunck_selects 
+
+def get_chunk_with_overlap(num_frames, window_size = 80, overlap = 10):
+    assert overlap % 2 == 0
+    if num_frames <= window_size:
+        chunk_idexes = np.linspace(0, num_frames-1, num_frames).astype(int)
+        return [chunk_idexes], [(0, len(chunk_idexes))]
+        
+    step = window_size - overlap 
+    chunk_idxes = view_as_windows(np.array(range(num_frames)), window_size, step= step)
+    chunk_supp = np.linspace(num_frames - window_size, num_frames-1, num = window_size).astype(int)
+    chunk_idxes = np.concatenate((chunk_idxes, chunk_supp[None, ]))
+    last_chunk = chunk_idxes[-1][:step][-1] - chunk_idxes[-2][:step][-1] + int(overlap/2)
+    chunck_selects = get_chunk_selects(chunk_idxes, last_chunk, window_size= window_size, overlap=overlap)
+    
+    return chunk_idxes, chunck_selects
+
 def read_fitting_seq(fitting_paths, return_valid=False):
     '''
     Reads in a sequence of PROX/PROXD SMPL fits and concats into single data dict as
@@ -215,22 +245,11 @@ class ProxDataset(Dataset):
             num_seqs = cur_rec_len // self.seq_len
             ####################################################################################################
             seq_interval = []
-            num_frames = len(img_paths)
-            num_seqs = math.ceil((num_frames - self.overlap_len) / (self.seq_len - self.overlap_len))
-            repeat = self.seq_len*num_seqs - self.overlap_len*(num_seqs-1) - num_frames # number of extra frames we cover
-            extra_o = repeat // (num_seqs - 1) # we increase the overlap to avoid these as much as possible
-            overlap_len = self.overlap_len + extra_o
-            new_cov = self.seq_len*num_seqs - overlap_len*(num_seqs-1) # now compute how many frames are still left to account for
-            r = new_cov - num_frames
-            cur_s = 0
-            cur_e = cur_s + self.seq_len
-            for int_idx in range(num_seqs):
-                seq_interval.append((cur_s, cur_e))
-                cur_overlap = self.overlap_len
-                if int_idx < r:
-                    cur_overlap += 1 # update to account for final remainder
-                cur_s += (self.seq_len - cur_overlap)
-                cur_e = cur_s + self.seq_len
+            chunk_idxes, chunck_selects = get_chunk_with_overlap(cur_rec_len, window_size = self.seq_len, overlap=self.overlap_len)
+            chunk_idxes[:, [0, -1]]
+            chunk_boundary =  chunk_idxes[:, [0, -1]]
+            chunk_boundary[:, -1] += 1
+            seq_interval = chunk_boundary.tolist()
             
             ####################################################################################################
 
@@ -253,7 +272,8 @@ class ProxDataset(Dataset):
                     img_path_list.append(seq_paths)
                     subseq_idx_list.append(i)
             seq_intervals += seq_interval
-        
+            print(cur_rec_len, seq_interval[-1][-1], rec_name)
+
         return img_path_list, subseq_idx_list, seq_intervals
 
     def get_data_paths_from_img(self, img_paths):
