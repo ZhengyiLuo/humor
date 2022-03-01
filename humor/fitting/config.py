@@ -115,6 +115,10 @@ def parse_args(argv):
     parser.add_argument('--save-stages-results', dest='save_stages_results', action='store_true', help="Saves intermediate optimized results")
     parser.set_defaults(save_stages_results=False)
 
+
+    parser.add_argument('--start', type=int, default=-1, help='Start for prox')
+    parser.add_argument('--end', type=int, default=-1, help='Ending for prox')
+
     known_args, unknown_args = parser.parse_known_args(argv)
 
     return known_args

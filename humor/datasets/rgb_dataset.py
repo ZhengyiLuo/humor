@@ -137,7 +137,7 @@ class RGBVideoDataset(Dataset):
             'floor_plane' : [],
             'names' : []
         }
-        for seq_idx in range(c):
+        for seq_idx in range(num_seqs):
             sidx, eidx = seq_intervals[seq_idx]
 
             data_out['cam_matx'].append(cam_mat)

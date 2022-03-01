@@ -206,13 +206,12 @@ class MotionOptimizer():
                   lbfgs_max_iter=20,
                   stages_res_out=None,
                   fit_gender='neutral'):
-
+        lbfgs_max_iter = 1
         if len(num_iter) != 3:
             print('Must have num iters for 3 stages! But %d stages were given!' % (len(num_iter)))
             exit()
-
         per_stage_outputs = {} # SMPL results after each stage
-
+        out_names = [i.split("/")[-1]for i in stages_res_out]
         #
         # Initialization
         #
@@ -247,11 +246,13 @@ class MotionOptimizer():
                 pred_data, _ = self.smpl_results(self.trans, self.root_orient, body_pose, self.betas)
                 # compute data losses only
                 loss, stats_dict = self.fitting_loss.root_fit(observed_data, pred_data)
-                log_cur_stats(stats_dict, loss, iter=i)
+                # log_cur_stats(stats_dict, loss, iter=i)
                 loss.backward()
                 return loss
 
             root_optim.step(closure)
+
+            print(f"Stage I: ======= iter {i}: {observed_data['seq_interval'].cpu().numpy().tolist()} {out_names}=======")
 
         body_pose = self.latent2pose(self.latent_pose)
         stage1_pred_data, _ = self.smpl_results(self.trans, self.root_orient, body_pose, self.betas)
@@ -299,10 +300,10 @@ class MotionOptimizer():
                 pred_data['betas'] = self.betas
                 # compute data losses and pose prior
                 loss, stats_dict = self.fitting_loss.smpl_fit(observed_data, pred_data, self.seq_len)
-                log_cur_stats(stats_dict, loss, iter=i)
+                # log_cur_stats(stats_dict, loss, iter=i)
                 loss.backward()
                 return loss
-
+            print(f"Stage II: ======= iter {i}: {observed_data['seq_interval'].cpu().numpy().tolist()} {out_names}=======")
             smpl_optim.step(closure)
 
         body_pose = self.latent2pose(self.latent_pose)
@@ -591,9 +592,10 @@ class MotionOptimizer():
                     if 'prev_batch_overlap_res' in observed_data:
                         loss_obs_data['prev_batch_overlap_res'] = observed_data['prev_batch_overlap_res']
                     loss_nsteps = cur_stage3_nsteps
-                    # if in initial stage, don't want to use overlap constraints
+                    # if in initial stage, don't want to use overlap constraintsloss_obs_data['prev_batch_overlap_res']['seq_interval']
                     self.fitting_loss.loss_weights['rgb_overlap_consist'] = 0.0
-
+                
+                
                 # compute data losses, pose & motion prior
                 loss, stats_dict = self.fitting_loss.motion_fit(loss_obs_data, pred_data, cam_pred_data, loss_nsteps, 
                                                                 cond_prior=cur_cond_prior,
@@ -603,10 +605,10 @@ class MotionOptimizer():
                     # change it back
                     self.fitting_loss.loss_weights['rgb_overlap_consist'] = og_overlap_consist_weight
 
-                log_cur_stats(stats_dict, loss, iter=i)
+                # log_cur_stats(stats_dict, loss, iter=i)
                 loss.backward()
                 return loss
-
+            print(f"Stage III: ======= iter {i}: {observed_data['seq_interval'].cpu().numpy().tolist()} {out_names}=======")
             motion_optim.step(closure)
 
         body_pose = self.latent2pose(self.latent_pose)

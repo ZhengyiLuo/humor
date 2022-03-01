@@ -109,7 +109,9 @@ class ProxDataset(Dataset):
                        recording=None, # if given, loads only this single recording
                        recording_subseq_idx=-1, # if given, loads only this single subsequence of a specified recording
                        return_fitting=True, # if true, loads SMPL params fit from MOSH (quant) or PROXD (qual) as "ground truth"
-                       flip=True # reflects images and masks about y axis, MUST be true so that GT fitting matches data and given scene geometry
+                       flip=True, # reflects images and masks about y axis, MUST be true so that GT fitting matches data and given scene geometry
+                       start = -1, 
+                       end = -1
                  ):
         super(ProxDataset, self).__init__()
 
@@ -156,12 +158,12 @@ class ProxDataset(Dataset):
         self.overlap_len = 10
 
         # load (img) data paths 
-        self.img_paths, self.subseq_inds, self.seq_intervals = self.load_data()
+        self.img_paths, self.subseq_inds, self.seq_intervals = self.load_data(start, end)
         
         self.data_len = len(self.img_paths)
         print('This split contains %d sub-sequences...' % (self.data_len))
 
-    def load_data(self):
+    def load_data(self, start = -1, end = -1):
         # camera intrinsics are the same for all sequences/scenes
         self.projection = Projection(self.calib_dir)
         
@@ -188,9 +190,8 @@ class ProxDataset(Dataset):
         subseq_idx_list = [] # sub index into the recording
         seq_intervals = []
 
-        # start = 21
-        # end = 23
-        # recording_list, recording_names = recording_list[start:end], recording_names[start:end]
+        if start != -1 and end != -1:
+            recording_list, recording_names = recording_list[start:end], recording_names[start:end]
 
         for rec_path, rec_name in zip(recording_list, recording_names):
             img_folder = osp.join(rec_path, 'Color')
@@ -200,7 +201,6 @@ class ProxDataset(Dataset):
                             img_fn.endswith('.jpg') and
                             not img_fn.startswith('.')]
             img_paths = sorted(img_paths)
-
             # print(img_paths)
             cur_rec_len = len(img_paths)
             # cut off edges of qualitative data to avoid static parts
@@ -253,7 +253,7 @@ class ProxDataset(Dataset):
                     img_path_list.append(seq_paths)
                     subseq_idx_list.append(i)
             seq_intervals += seq_interval
-            
+        
         return img_path_list, subseq_idx_list, seq_intervals
 
     def get_data_paths_from_img(self, img_paths):

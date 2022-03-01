@@ -96,7 +96,9 @@ def main(args, config_file):
                               return_mask=False,
                               estimate_floor_plane=False, # don't want to use GT floor
                               load_floor_plane=True, # use PlaneRCNN instead
-                              flip=True # must be flipped if load_floor_plane only need this to match the scene/PROXD fittings for comparison
+                              flip=True,  # must be flipped if load_floor_plane only need this to match the scene/PROXD fittings for comparison
+                              start = args.start,
+                              end = args.end
                             )
         data_fps = 30
         im_dim = (1920, 1080)
@@ -390,7 +392,7 @@ def main(args, config_file):
                                     stage3_contact_refine_only=args.stage3_contact_refine_only,
                                     use_chamfer=('points3d' in observed_data),
                                     im_dim=im_dim)
-
+        
         # run optimizer
         optim_result, per_stage_results = optimizer.run(observed_data,
                                                         data_fps=data_fps,
