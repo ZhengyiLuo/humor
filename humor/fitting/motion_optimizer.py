@@ -206,7 +206,6 @@ class MotionOptimizer():
                   lbfgs_max_iter=20,
                   stages_res_out=None,
                   fit_gender='neutral'):
-        lbfgs_max_iter = 1
         if len(num_iter) != 3:
             print('Must have num iters for 3 stages! But %d stages were given!' % (len(num_iter)))
             exit()

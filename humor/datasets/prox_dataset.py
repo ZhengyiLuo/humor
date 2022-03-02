@@ -246,7 +246,6 @@ class ProxDataset(Dataset):
             ####################################################################################################
             seq_interval = []
             chunk_idxes, chunck_selects = get_chunk_with_overlap(cur_rec_len, window_size = self.seq_len, overlap=self.overlap_len)
-            chunk_idxes[:, [0, -1]]
             chunk_boundary =  chunk_idxes[:, [0, -1]]
             chunk_boundary[:, -1] += 1
             seq_interval = chunk_boundary.tolist()
