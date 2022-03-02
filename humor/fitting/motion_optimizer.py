@@ -19,7 +19,7 @@ from body_model.utils import SMPL_JOINTS, KEYPT_VERTS, smpl_to_openpose
 
 from fitting.fitting_utils import OP_IGNORE_JOINTS, parse_floor_plane, compute_cam2prior, OP_EDGE_LIST, log_cur_stats
 from fitting.fitting_loss import FittingLoss
-
+import gc
 
 LINE_SEARCH = 'strong_wolfe'
 J_BODY = len(SMPL_JOINTS)-1 # no root
@@ -203,7 +203,7 @@ class MotionOptimizer():
                   data_fps=30,
                   lr=1.0,
                   num_iter=[30, 70, 70],
-                  lbfgs_max_iter=20,
+                  lbfgs_max_iter=30,
                   stages_res_out=None,
                   fit_gender='neutral'):
         if len(num_iter) != 3:
@@ -268,7 +268,8 @@ class MotionOptimizer():
                                            trans=res_trans[bidx],
                                            root_orient=res_root_orient[bidx],
                                            pose_body=res_body_pose[bidx])
-
+        torch.cuda.empty_cache()
+        gc.collect()
         #
         # Stage II full pose and shape
         #
@@ -304,7 +305,7 @@ class MotionOptimizer():
                 return loss
             print(f"Stage II: ======= iter {i}: {observed_data['seq_interval'].cpu().numpy().tolist()} {out_names}=======")
             smpl_optim.step(closure)
-
+        
         body_pose = self.latent2pose(self.latent_pose)
         stage2_pred_data, _ = self.smpl_results(self.trans, self.root_orient, body_pose, self.betas)
         per_stage_outputs['stage2'] = stage2_pred_data
@@ -325,7 +326,8 @@ class MotionOptimizer():
             # No need to continue optimizing
             return self.get_optim_result(body_pose), per_stage_outputs
 
-
+        torch.cuda.empty_cache()
+        gc.collect()
         #
         # Stage III full pose and shape with motion prior
         #
