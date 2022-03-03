@@ -268,7 +268,6 @@ class MotionOptimizer():
                                            trans=res_trans[bidx],
                                            root_orient=res_root_orient[bidx],
                                            pose_body=res_body_pose[bidx])
-        torch.cuda.empty_cache()
         gc.collect()
         #
         # Stage II full pose and shape
@@ -326,7 +325,6 @@ class MotionOptimizer():
             # No need to continue optimizing
             return self.get_optim_result(body_pose), per_stage_outputs
 
-        torch.cuda.empty_cache()
         gc.collect()
         #
         # Stage III full pose and shape with motion prior

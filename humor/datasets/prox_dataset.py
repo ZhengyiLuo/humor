@@ -141,10 +141,11 @@ class ProxDataset(Dataset):
                        return_fitting=True, # if true, loads SMPL params fit from MOSH (quant) or PROXD (qual) as "ground truth"
                        flip=True, # reflects images and masks about y axis, MUST be true so that GT fitting matches data and given scene geometry
                        start = -1, 
-                       end = -1
+                       end = -1, 
+                       user_overlap = False
                  ):
         super(ProxDataset, self).__init__()
-
+        self.user_overlap = user_overlap
         self.root_path = root_path
         self.quant = quant
         data_dir = 'quantitative' if self.quant else 'qualitative'
@@ -185,7 +186,7 @@ class ProxDataset(Dataset):
         data_splits = QUANT_SPLITS if self.quant else QUAL_SPLITS
         self.split_scenes = data_splits[0] if self.split == 'train' else data_splits[1]
 
-        self.overlap_len = 10
+        self.overlap_len = 10 if self.user_overlap else 0
 
         # load (img) data paths 
         self.img_paths, self.subseq_inds, self.seq_intervals = self.load_data(start, end)
@@ -259,21 +260,23 @@ class ProxDataset(Dataset):
                 img_path_list.append(seq_paths)
                 subseq_idx_list.append(self.recording_subseq_idx)
             else:
-                # for i in range(num_seqs):
-                #     sidx = i*self.seq_len
-                #     eidx = sidx + self.seq_len
-                #     seq_paths = img_paths[sidx:eidx]
-                #     img_path_list.append(seq_paths)
-                #     subseq_idx_list.append(i)
+                # if self.user_overlap:
+                #     for i in range(num_seqs):
+                #         sidx = i*self.seq_len
+                #         eidx = sidx + self.seq_len
+                #         seq_paths = img_paths[sidx:eidx]
+                #         img_path_list.append(seq_paths)
+                #         subseq_idx_list.append(i)
+                # else:
 
                 for i, (sidx, eidx) in enumerate(seq_interval):
                     seq_paths = img_paths[sidx:eidx]
                     img_path_list.append(seq_paths)
                     subseq_idx_list.append(i)
-            seq_intervals += seq_interval
-            print(cur_rec_len, seq_interval[-1][-1], rec_name)
 
+            seq_intervals += seq_interval
         return img_path_list, subseq_idx_list, seq_intervals
+        # return img_path_list[19:22], subseq_idx_list[19:22], seq_intervals[19:22]
 
     def get_data_paths_from_img(self, img_paths):
         # return paths for all other data modalities from the img_paths for a sequence

@@ -98,7 +98,8 @@ def main(args, config_file):
                               load_floor_plane=True, # use PlaneRCNN instead
                               flip=True,  # must be flipped if load_floor_plane only need this to match the scene/PROXD fittings for comparison
                               start = args.start,
-                              end = args.end
+                              end = args.end, 
+                              user_overlap=(not args.rgb_overlap_len is None),
                             )
         data_fps = 30
         im_dim = (1920, 1080)
