@@ -30,6 +30,7 @@ class BodyModel(nn.Module):
         :param use_vtx_selector: if true, returns additional vertices as joints that correspond to OpenPose joints
         '''
         self.use_vtx_selector = use_vtx_selector
+        self.num_betas = num_betas
         cur_vertex_ids = None
         if self.use_vtx_selector:
             cur_vertex_ids = vertex_ids[model_type]
@@ -75,6 +76,7 @@ class BodyModel(nn.Module):
         Note dmpls are not supported.
         '''
         assert(dmpls is None)
+        
         out_obj = self.bm(
                 betas=betas,
                 global_orient=root_orient,
