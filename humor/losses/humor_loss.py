@@ -110,15 +110,15 @@ class HumorLoss(nn.Module):
         if sum(smpl_losses) > 0.0:
             self.use_smpl_losses = True
             # need a body model to compute the losses
-            male_bm_path = os.path.join(SMPLH_PATH, "SMPLH_MALE.npz")
-            female_bm_path = os.path.join(SMPLH_PATH, "SMPLH_FEMALE.npz")
+            male_bm_path = os.path.join(SMPLH_PATH, 'male/model.npz')
+            female_bm_path = os.path.join(SMPLH_PATH, 'female/model.npz')
 
-            self.male_bm = BodyModel(
-                bm_path=male_bm_path, num_betas=16, batch_size=self.smpl_batch_size
-            )
-            self.female_bm = BodyModel(
-                bm_path=female_bm_path, num_betas=16, batch_size=self.smpl_batch_size
-            )
+            self.male_bm = BodyModel(bm_path=male_bm_path,
+                                     num_betas=16,
+                                     batch_size=self.smpl_batch_size)
+            self.female_bm = BodyModel(bm_path=female_bm_path,
+                                       num_betas=16,
+                                       batch_size=self.smpl_batch_size)
 
     def forward(self, pred_dict, gt_dict, cur_epoch, gender=None, betas=None):
         """
@@ -157,8 +157,7 @@ class HumorLoss(nn.Module):
                     )  # optimize full weight for second half of cycle
                 if anneal_epoch >= anneal_start:
                     anneal_weight = (anneal_epoch - anneal_start) / (
-                        anneal_end - anneal_start
-                    )
+                        anneal_end - anneal_start)
                 else:
                     anneal_weight = 0.0
                 anneal_weight = 1.0 if anneal_weight > 1.0 else anneal_weight
@@ -205,9 +204,8 @@ class HumorLoss(nn.Module):
                 loss = loss + self.contacts_loss_weight * cur_contacts_loss
 
                 # other accuracy statistics
-                pred_contacts = (torch.sigmoid(pred_contacts) > CONTACT_THRESH).to(
-                    torch.bool
-                )
+                pred_contacts = (torch.sigmoid(pred_contacts) >
+                                 CONTACT_THRESH).to(torch.bool)
                 gt_contacts = gt_contacts.to(torch.bool)
                 # counts for confusion matrix
                 # true positive (pred contact, labeled contact)
@@ -223,9 +221,9 @@ class HumorLoss(nn.Module):
                 true_neg = (~pred_contacts) & (~gt_contacts)
                 true_neg_cnt = torch.sum(true_neg).to(torch.float)
 
-                acc = (true_pos_cnt + true_neg_cnt) / (
-                    true_pos_cnt + false_pos_cnt + false_neg_cnt + true_neg_cnt
-                )
+                acc = (true_pos_cnt +
+                       true_neg_cnt) / (true_pos_cnt + false_pos_cnt +
+                                        false_neg_cnt + true_neg_cnt)
                 pos_acc = true_pos_cnt / (true_pos_cnt + false_neg_cnt)
                 neg_acc = true_neg_cnt / (true_neg_cnt + false_pos_cnt)
                 stats_dict["contacts_acc"] = acc
@@ -237,15 +235,15 @@ class HumorLoss(nn.Module):
                 )
 
         if self.contacts_vel_loss_weight > 0.0:
-            if "contacts" in pred_dict.keys() and "joints_vel" in pred_dict.keys():
+            if "contacts" in pred_dict.keys(
+            ) and "joints_vel" in pred_dict.keys():
                 pred_contacts = torch.sigmoid(pred_dict["contacts"])
                 pred_joints_vel = pred_dict["joints_vel"].reshape(
-                    (-1, len(SMPL_JOINTS), 3)
-                )
+                    (-1, len(SMPL_JOINTS), 3))
                 contact_joints_vel = pred_joints_vel[:, CONTACT_INDS, :]
                 # use predicted contact probability to weight regularization on joint velocity
                 vel_mag = torch.norm(contact_joints_vel, dim=-1)
-                cur_contact_vel_loss = pred_contacts * (vel_mag ** 2)
+                cur_contact_vel_loss = pred_contacts * (vel_mag**2)
                 cur_stat_contact_vel_loss = cur_contact_vel_loss.mean()
                 cur_contact_vel_loss = cur_stat_contact_vel_loss
                 stats_dict["contacts_vel_loss"] = cur_stat_contact_vel_loss
@@ -277,14 +275,16 @@ class HumorLoss(nn.Module):
 
             # need to transform rotation matrices to aa for SMPL model
             B = pred_trans.size(0)
-            pred_orient = rotation_matrix_to_angle_axis(pred_orient.reshape((B, 3, 3)))
-            gt_orient = rotation_matrix_to_angle_axis(gt_orient.reshape((B, 3, 3)))
+            pred_orient = rotation_matrix_to_angle_axis(
+                pred_orient.reshape((B, 3, 3)))
+            gt_orient = rotation_matrix_to_angle_axis(
+                gt_orient.reshape((B, 3, 3)))
             pred_pose = rotation_matrix_to_angle_axis(
-                pred_pose.reshape((B * NUM_BODY_JOINTS, 3, 3))
-            ).reshape((B, NUM_BODY_JOINTS * 3))
+                pred_pose.reshape((B * NUM_BODY_JOINTS, 3, 3))).reshape(
+                    (B, NUM_BODY_JOINTS * 3))
             gt_pose = rotation_matrix_to_angle_axis(
-                gt_pose.reshape((B * NUM_BODY_JOINTS, 3, 3))
-            ).reshape((B, NUM_BODY_JOINTS * 3))
+                gt_pose.reshape((B * NUM_BODY_JOINTS, 3, 3))).reshape(
+                    (B, NUM_BODY_JOINTS * 3))
 
             pred_vals = [pred_trans, pred_orient, pred_pose]
             gt_vals = [gt_trans, gt_orient, gt_pose, betas]
@@ -350,9 +350,10 @@ class HumorLoss(nn.Module):
                     gt_joints.append(gt_body.Jtr)
                     gt_mesh.append(gt_body.v)
 
-            pred_joints = torch.cat(pred_joints, axis=0)[:, : len(SMPL_JOINTS), :]
+            pred_joints = torch.cat(pred_joints,
+                                    axis=0)[:, :len(SMPL_JOINTS), :]
             pred_mesh = torch.cat(pred_mesh, axis=0)
-            gt_joints = torch.cat(gt_joints, axis=0)[:, : len(SMPL_JOINTS), :]
+            gt_joints = torch.cat(gt_joints, axis=0)[:, :len(SMPL_JOINTS), :]
             gt_mesh = torch.cat(gt_mesh, axis=0)
 
             pred_verts = pred_mesh[:, KEYPT_VERTS, :]
@@ -378,54 +379,55 @@ class HumorLoss(nn.Module):
                     )
                     exit()
                 regressed_joints = pred_dict["joints"].reshape(
-                    (B, len(SMPL_JOINTS), -1)
-                )
+                    (B, len(SMPL_JOINTS), -1))
                 # need to reorder regressed joints with mask_list to ensure consistency with smpl joints
                 regressed_joints = torch.cat(
-                    [regressed_joints[mask_list[i]] for i in range(len(mask_list))],
+                    [
+                        regressed_joints[mask_list[i]]
+                        for i in range(len(mask_list))
+                    ],
                     axis=0,
                 )
 
                 smpl_joint_consistency_loss = self.regr_loss(
-                    pred_joints, regressed_joints
+                    pred_joints, regressed_joints)
+                smpl_joint_consistency_stat_loss = smpl_joint_consistency_loss.mean(
                 )
-                smpl_joint_consistency_stat_loss = smpl_joint_consistency_loss.mean()
                 smpl_joint_consistency_loss = smpl_joint_consistency_stat_loss
                 stats_dict[
-                    "smpl_joint_consistency_loss"
-                ] = smpl_joint_consistency_stat_loss
-                loss = (
-                    loss
-                    + self.smpl_joint_consistency_loss_weight
-                    * smpl_joint_consistency_loss
-                )
+                    "smpl_joint_consistency_loss"] = smpl_joint_consistency_stat_loss
+                loss = (loss + self.smpl_joint_consistency_loss_weight *
+                        smpl_joint_consistency_loss)
             if self.smpl_vert_consistency_loss_weight > 0.0:
                 if not "verts" in pred_dict.keys():
                     print(
                         "Must regress verts in order to use smpl vert consistency loss!"
                     )
                     exit()
-                regressed_verts = pred_dict["verts"].reshape((B, len(KEYPT_VERTS), -1))
+                regressed_verts = pred_dict["verts"].reshape(
+                    (B, len(KEYPT_VERTS), -1))
                 # need to reorder regressed verts with mask_list to ensure consistency with smpl verts
                 regressed_verts = torch.cat(
-                    [regressed_verts[mask_list[i]] for i in range(len(mask_list))],
+                    [
+                        regressed_verts[mask_list[i]]
+                        for i in range(len(mask_list))
+                    ],
                     axis=0,
                 )
 
-                smpl_vert_consistency_loss = self.regr_loss(pred_verts, regressed_verts)
-                smpl_vert_consistency_stat_loss = smpl_vert_consistency_loss.mean()
+                smpl_vert_consistency_loss = self.regr_loss(
+                    pred_verts, regressed_verts)
+                smpl_vert_consistency_stat_loss = smpl_vert_consistency_loss.mean(
+                )
                 smpl_vert_consistency_loss = smpl_vert_consistency_stat_loss
                 stats_dict[
-                    "smpl_vert_consistency_loss"
-                ] = smpl_vert_consistency_stat_loss
-                loss = (
-                    loss
-                    + self.smpl_vert_consistency_loss_weight
-                    * smpl_vert_consistency_loss
-                )
+                    "smpl_vert_consistency_loss"] = smpl_vert_consistency_stat_loss
+                loss = (loss + self.smpl_vert_consistency_loss_weight *
+                        smpl_vert_consistency_loss)
 
         if self.kl_loss_weight > 0.0:
-            stats_dict["reconstr_weighted_loss"] = loss - stats_dict["kl_weighted_loss"]
+            stats_dict["reconstr_weighted_loss"] = loss - stats_dict[
+                "kl_weighted_loss"]
 
         return loss, stats_dict
 
@@ -435,7 +437,8 @@ class HumorLoss(nn.Module):
         """
         new_pad_list = []
         for pad_idx, pad_tensor in enumerate(pad_list):
-            padding = torch.zeros((pad_size, pad_tensor.size(1))).to(pad_tensor)
+            padding = torch.zeros(
+                (pad_size, pad_tensor.size(1))).to(pad_tensor)
             new_pad_list.append(torch.cat([pad_tensor, padding], dim=0))
         return new_pad_list
 
@@ -453,9 +456,8 @@ class HumorLoss(nn.Module):
         Return:
             kl: tensor: (batch,): kl between each sample
         """
-        element_wise = 0.5 * (
-            torch.log(pv) - torch.log(qv) + qv / pv + (qm - pm).pow(2) / pv - 1
-        )
+        element_wise = 0.5 * (torch.log(pv) - torch.log(qv) + qv / pv +
+                              (qm - pm).pow(2) / pv - 1)
         kl = element_wise.sum(-1)
         return kl
 
@@ -470,10 +472,7 @@ class HumorLoss(nn.Module):
             log_prob: tensor: (batch_1, batch_2, ..., batch_k): log probability of
                 each sample. Note that the summation dimension is not kept
         """
-        log_prob = (
-            -torch.log(torch.sqrt(v))
-            - math.log(math.sqrt(2 * math.pi))
-            - ((x - m) ** 2 / (2 * v))
-        )
+        log_prob = (-torch.log(torch.sqrt(v)) -
+                    math.log(math.sqrt(2 * math.pi)) - ((x - m)**2 / (2 * v)))
         log_prob = torch.sum(log_prob, dim=-1)
         return log_prob

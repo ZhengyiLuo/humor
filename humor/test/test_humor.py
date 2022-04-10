@@ -50,7 +50,8 @@ def test(args_obj, config_file):
     mkdir(test_scripts_path)
     pkg_root = os.path.join(cur_file_path, "..")
     dataset_file = class_name_to_file_name(args.dataset)
-    dataset_file_path = os.path.join(pkg_root, "datasets/" + dataset_file + ".py")
+    dataset_file_path = os.path.join(pkg_root,
+                                     "datasets/" + dataset_file + ".py")
     model_file = class_name_to_file_name(args.model)
     loss_file = class_name_to_file_name(args.loss)
     model_file_path = os.path.join(pkg_root, "models/" + model_file + ".py")
@@ -64,16 +65,16 @@ def test(args_obj, config_file):
     model_class = importlib.import_module("models." + model_file)
     Model = getattr(model_class, args.model)
     model = Model(
-        **args_obj.model_dict, model_smpl_batch_size=args.batch_size
-    )  # assumes model is HumorModel
+        **args_obj.model_dict,
+        model_smpl_batch_size=args.batch_size)  # assumes model is HumorModel
 
     # load loss class and instantiate
     loss_class = importlib.import_module("losses." + loss_file)
     Loss = getattr(loss_class, args.loss)
     loss_func = Loss(
         **args_obj.loss_dict,
-        smpl_batch_size=args.batch_size * args_obj.dataset.sample_num_frames
-    )  # assumes loss is HumorLoss
+        smpl_batch_size=args.batch_size *
+        args_obj.dataset.sample_num_frames)  # assumes loss is HumorLoss
 
     device = get_device(args.gpu)
     model.to(device)
@@ -101,9 +102,8 @@ def test(args_obj, config_file):
         )
         Logger.log("Successfully loaded saved weights...")
         Logger.log(
-            "Saved checkpoint is from epoch idx %d with min val loss %.6f..."
-            % (start_epoch, min_val_loss)
-        )
+            "Saved checkpoint is from epoch idx %d with min val loss %.6f..." %
+            (start_epoch, min_val_loss))
     else:
         Logger.log("ERROR: No weight specified to load!!")
         # return
@@ -117,7 +117,8 @@ def test(args_obj, config_file):
         Logger.log(
             "WARNING: running evaluation on VALIDATION data as requested...should only be used for debugging!"
         )
-    Dataset = getattr(importlib.import_module("datasets." + dataset_file), args.dataset)
+    Dataset = getattr(importlib.import_module("datasets." + dataset_file),
+                      args.dataset)
     # split = 'test'
     # if args.test_on_train:
     #     split = 'train'
@@ -198,8 +199,165 @@ def test(args_obj, config_file):
             viz_pred_joints=args.viz_pred_joints,
             viz_smpl_joints=args.viz_smpl_joints,
         )
+    if args.eval_recon or args.eval_recon_debug:
+        eval_recon(model,
+                   test_dataset,
+                   test_loader,
+                   device,
+                   out_dir=args.out if args.eval_recon else None,
+                   viz_contacts=args.viz_contacts,
+                   viz_pred_joints=args.viz_pred_joints,
+                   viz_smpl_joints=args.viz_smpl_joints)
 
     Logger.log("Finished!")
+
+
+def eval_recon(model,
+               test_dataset,
+               test_loader,
+               device,
+               out_dir=None,
+               num_samples=1,
+               samp_len=10.0,
+               viz_contacts=False,
+               viz_pred_joints=False,
+               viz_smpl_joints=False):
+    Logger.log('Evaluating reconstruction qualitatively...')
+    from body_model.body_model import BodyModel
+    from body_model.utils import SMPLH_PATH
+
+    res_out_dir = None
+    if out_dir is not None:
+        res_out_dir = os.path.join(out_dir, 'eval_recon')
+        if not os.path.exists(res_out_dir):
+            os.mkdir(res_out_dir)
+
+    J = len(SMPL_JOINTS)
+    V = NUM_KEYPT_VERTS
+    male_bm_path = os.path.join(SMPLH_PATH, 'male/model.npz')
+    female_bm_path = os.path.join(SMPLH_PATH, 'female/model.npz')
+    male_bm = BodyModel(bm_path=male_bm_path,
+                        num_betas=16,
+                        batch_size=test_dataset.sample_num_frames).to(device)
+    female_bm = BodyModel(bm_path=female_bm_path,
+                          num_betas=16,
+                          batch_size=test_dataset.sample_num_frames).to(device)
+
+    with torch.no_grad():
+        test_dataset.pre_batch()
+        model.eval()
+        for i, data in enumerate(test_loader):
+            # get inputs
+            batch_in, batch_out, meta = data
+            print(meta['path'])
+            seq_name_list = [spath[:-4] for spath in meta['path']]
+            if res_out_dir is None:
+                batch_res_out_list = [None] * len(seq_name_list)
+            else:
+                batch_res_out_list = [
+                    os.path.join(
+                        res_out_dir,
+                        seq_name.replace('/', '_') + '_b' + str(i) + 'seq' +
+                        str(sidx))
+                    for sidx, seq_name in enumerate(seq_name_list)
+                ]
+                print(batch_res_out_list)
+
+            _, _, _, global_gt_dict = model.prepare_input(
+                batch_in,
+                device,
+                data_out=batch_out,
+                return_input_dict=False,
+                return_global_dict=True)
+            # import ipdb
+            # ipdb.set_trace()
+
+            # # NOTE: DEBUG add random translation to ensure canonicalization is properly handled in infer_global_seq and roll_out
+            global_gt_dict['trans'] += torch.tensor([5.0, 5.0, 0.0]).reshape(
+                (1, 1, 1, 3)).to(global_gt_dict['trans'])
+            global_gt_dict['joints'] += torch.tensor([5.0, 5.0, 0.0]).reshape(
+                (1, 1, 1, 3)).expand((1, 1, 22, 3)).reshape(
+                    (1, 1, 1, 66)).to(global_gt_dict['joints'])
+
+            # model doesn't take in contacts, only ['trans', 'trans_vel', 'root_orient', 'root_orient_vel', 'pose_body', 'joints', 'joints_vel']
+            #   also don't need extra dimension that loader gives by default.
+            global_in_dict = {
+                k: v[:, :, 0].clone()
+                for k, v in global_gt_dict.items() if k != 'contacts'
+            }
+
+            # Encode. i.e. infer latent z vector for all pairs of frames in the seq
+            #           Note this function can handle arbitrary "global" sequences
+            #           (i.e. the first frame doesn't have to be in canonical system already, it will do this internally)
+            encode_results = model.infer_global_seq(global_in_dict)
+            prior_z_out, posterior_z_out = encode_results
+            latent_z_seq = posterior_z_out[
+                0]  # use mean of the posterior (encoder) output
+            # Decode. roll out reconstructed motion starting from initial step using the latent z sequence
+            #   for this, only need the step at t=0, but do need the extra dimension, i.e. should be size (B, 1, D)
+            decode_input_dict = {
+                k: v[:, 0].clone()
+                for k, v in global_gt_dict.items() if k != 'contacts'
+            }
+            # canonicalize_input=True allows it to handle any "global" inial state input (i.e. doesn't need to be in canonical frame already)
+            #       and uncanonicalize_output will transform back into the input "global" frame
+            x_pred_dict = model.roll_out(None,
+                                         decode_input_dict,
+                                         latent_z_seq.size(1),
+                                         z_seq=latent_z_seq,
+                                         gender=meta['gender'],
+                                         betas=meta['betas'].to(device),
+                                         canonicalize_input=True,
+                                         uncanonicalize_output=True)
+
+            # assemble full reconstruction (initial state + decoded states)
+            recon_pred_dict = {
+                k: torch.cat([v[:, 0:1, 0], x_pred_dict[k]], dim=1)
+                for k, v in global_gt_dict.items()
+            }
+            import ipdb
+            ipdb.set_trace()
+            import joblib
+            joblib.dump(recon_pred_dict, "test1.pkl")
+
+            # # visualize and save
+            # print('Visualizing ground truth!')
+            # imsize = (1080, 1080)
+            # cur_res_out_list = batch_res_out_list
+            # if res_out_dir is not None:
+            #     cur_res_out_list = [
+            #         out_path + '_gt' for out_path in batch_res_out_list
+            #     ]
+            #     imsize = (720, 720)
+            # viz_gt_dict = {k: v[:, :, 0] for k, v in global_gt_dict.items()}
+            # viz_eval_samp(global_gt_dict,
+            #               viz_gt_dict,
+            #               meta,
+            #               male_bm,
+            #               female_bm,
+            #               cur_res_out_list,
+            #               imw=imsize[0],
+            #               imh=imsize[1],
+            #               show_smpl_joints=viz_smpl_joints,
+            #               show_pred_joints=viz_pred_joints,
+            #               show_contacts=viz_contacts)
+            # print('Visualizing reconstruction!')
+            # cur_res_out_list = batch_res_out_list
+            # if res_out_dir is not None:
+            #     cur_res_out_list = [
+            #         out_path + '_recon' for out_path in batch_res_out_list
+            #     ]
+            # viz_eval_samp(global_gt_dict,
+            #               recon_pred_dict,
+            #               meta,
+            #               male_bm,
+            #               female_bm,
+            #               cur_res_out_list,
+            #               imw=imsize[0],
+            #               imh=imsize[1],
+            #               show_smpl_joints=viz_smpl_joints,
+            #               show_pred_joints=viz_pred_joints,
+            #               show_contacts=viz_contacts)
 
 
 def eval_sampling(
@@ -214,11 +372,12 @@ def eval_sampling(
     viz_pred_joints=False,
     viz_smpl_joints=False,
 ):
-    Logger.log("Evaluating sampling qualitatively...")
+    Logger.log("Eval uating sampling qualitatively...")
     from body_model.body_model import BodyModel
     from body_model.utils import SMPLH_PATH
 
     torch.manual_seed(0)
+    np.random.seed(0)
 
     samp_len = 10
     eval_qual_samp_len = int(samp_len * 30.0)  # at 30 Hz
@@ -231,14 +390,14 @@ def eval_sampling(
 
     J = len(SMPL_JOINTS)
     V = NUM_KEYPT_VERTS
-    male_bm_path = os.path.join(SMPLH_PATH, "SMPLH_MALE.npz")
-    female_bm_path = os.path.join(SMPLH_PATH, "SMPLH_FEMALE.npz")
-    male_bm = BodyModel(
-        bm_path=male_bm_path, num_betas=16, batch_size=eval_qual_samp_len
-    ).to(device)
-    female_bm = BodyModel(
-        bm_path=female_bm_path, num_betas=16, batch_size=eval_qual_samp_len
-    ).to(device)
+    male_bm_path = os.path.join(SMPLH_PATH, 'male/model.npz')
+    female_bm_path = os.path.join(SMPLH_PATH, 'female/model.npz')
+    male_bm = BodyModel(bm_path=male_bm_path,
+                        num_betas=16,
+                        batch_size=eval_qual_samp_len).to(device)
+    female_bm = BodyModel(bm_path=female_bm_path,
+                          num_betas=16,
+                          batch_size=eval_qual_samp_len).to(device)
 
     with torch.no_grad():
         test_dataset.pre_batch()
@@ -254,9 +413,9 @@ def eval_sampling(
                 batch_res_out_list = [
                     os.path.join(
                         res_out_dir,
-                        seq_name.replace("/", "_") + "_b" + str(i) + "seq" + str(sidx),
-                    )
-                    for sidx, seq_name in enumerate(seq_name_list)
+                        seq_name.replace("/", "_") + "_b" + str(i) + "seq" +
+                        str(sidx),
+                    ) for sidx, seq_name in enumerate(seq_name_list)
                 ]
                 print(batch_res_out_list)
             # continue
@@ -273,32 +432,38 @@ def eval_sampling(
             x_past = x_past[:, 0, :, :]  # only need input for first step
             rollout_input_dict = dict()
             for k in input_dict.keys():
-                rollout_input_dict[k] = input_dict[k][
-                    :, 0, :, :
-                ]  # only need first step
+                rollout_input_dict[k] = input_dict[
+                    k][:, 0, :, :]  # only need first step
 
             # sample same trajectory multiple times and save the joints/contacts output
-            num_frames = 50
+
+            num_frames = 2500
             for samp_idx in range(num_samples):
                 torch.manual_seed(0)
-                x_pred_dict, input_dict_acc = model.roll_out(
-                    x_past.clone(),
-                    {k: v.clone() for k, v in rollout_input_dict.items()},
-                    num_frames,
-                    gender=meta["gender"],
-                    betas=meta["betas"].to(device),
-                )
+
+                # x_pred_dict = model.roll_out(
+                #     x_past.clone(),
+                #     {k: v.clone()
+                #      for k, v in rollout_input_dict.items()},
+                #     num_frames,
+                #     gender=meta["gender"],
+                #     betas=meta["betas"].to(device),
+                # )
 
                 torch.manual_seed(0)
-                cur_input_dict = {k: v.clone() for k, v in rollout_input_dict.items()}
-                x_pred_dict_single = {
-                    "trans": torch.zeros((B, 1, 3)).to(x_past),
-                    "root_orient": torch.eye(3)
-                    .reshape((1, 1, 3, 3))
-                    .expand((B, 1, 3, 3))
-                    .to(x_past),
+                cur_input_dict = {
+                    k: v.clone()
+                    for k, v in rollout_input_dict.items()
                 }
-                import copy; acc = []
+                x_pred_dict_single = {
+                    "trans":
+                    torch.zeros((B, 1, 3)).to(x_past),
+                    "root_orient":
+                    torch.eye(3).reshape((1, 1, 3, 3)).expand(
+                        (B, 1, 3, 3)).to(x_past),
+                }
+                import copy
+                acc = []
                 for i in range(num_frames):
                     x_pred_dict_single, cur_input_dict = model.roll_out_single(
                         x_past,
@@ -306,7 +471,7 @@ def eval_sampling(
                         x_pred_dict_single,
                         gender=meta["gender"],
                         betas=meta["betas"].to(device),
-                    )
+                        use_mean=True)
 
                     in_data_list = []
                     for k in model.data_names:
@@ -314,39 +479,41 @@ def eval_sampling(
                     x_past = torch.cat(in_data_list, axis=2)
                     x_past = x_past.reshape((B, 1, -1))
                     acc.append(copy.deepcopy(x_pred_dict_single))
-                import joblib
-                joblib.dump([acc, x_pred_dict], 'test.pkl')
-                import ipdb; ipdb.set_trace()
 
-                    # in_data_list = []
-                    # for k in model.data_names:
-                    #     in_data_list.append(cur_input_dict_single[k])
-                    # x_past = torch.cat(in_data_list, axis=2)
-                    # x_past = x_past.reshape((B, 1, -1))
+                import joblib
+                joblib.dump(acc, 'test.pkl')
+                exit()
+
+                # in_data_list = []
+                # for k in model.data_names:
+                #     in_data_list.append(cur_input_dict_single[k])
+                # x_past = torch.cat(in_data_list, axis=2)
+                # x_past = x_past.reshape((B, 1, -1))
 
                 # visualize and save
-                print("Visualizing sample %d/%d!" % (samp_idx + 1, num_samples))
-                imsize = (1080, 1080)
-                cur_res_out_list = batch_res_out_list
-                if res_out_dir is not None:
-                    cur_res_out_list = [
-                        out_path + "_samp%d" % (samp_idx)
-                        for out_path in batch_res_out_list
-                    ]
-                    imsize = (720, 720)
-                viz_eval_samp(
-                    global_gt_dict,
-                    x_pred_dict,
-                    meta,
-                    male_bm,
-                    female_bm,
-                    cur_res_out_list,
-                    imw=imsize[0],
-                    imh=imsize[1],
-                    show_smpl_joints=viz_smpl_joints,
-                    show_pred_joints=viz_pred_joints,
-                    show_contacts=viz_contacts,
-                )
+                # print("Visualizing sample %d/%d!" %
+                #       (samp_idx + 1, num_samples))
+                # imsize = (1080, 1080)
+                # cur_res_out_list = batch_res_out_list
+                # if res_out_dir is not None:
+                #     cur_res_out_list = [
+                #         out_path + "_samp%d" % (samp_idx)
+                #         for out_path in batch_res_out_list
+                #     ]
+                #     imsize = (720, 720)
+                # viz_eval_samp(
+                #     global_gt_dict,
+                #     x_pred_dict,
+                #     meta,
+                #     male_bm,
+                #     female_bm,
+                #     cur_res_out_list,
+                #     imw=imsize[0],
+                #     imh=imsize[1],
+                #     show_smpl_joints=viz_smpl_joints,
+                #     show_pred_joints=viz_pred_joints,
+                #     show_contacts=viz_contacts,
+                # )
 
 
 def viz_eval_samp(
@@ -371,12 +538,11 @@ def viz_eval_samp(
     pred_world_root_orient = x_pred_dict["root_orient"]
     B, T, _ = pred_world_root_orient.size()
     pred_world_root_orient = rotation_matrix_to_angle_axis(
-        pred_world_root_orient.reshape((B * T, 3, 3))
-    ).reshape((B, T, 3))
+        pred_world_root_orient.reshape((B * T, 3, 3))).reshape((B, T, 3))
     pred_world_pose_body = x_pred_dict["pose_body"]
     pred_world_pose_body = rotation_matrix_to_angle_axis(
-        pred_world_pose_body.reshape((B * T * (J - 1), 3, 3))
-    ).reshape((B, T, (J - 1) * 3))
+        pred_world_pose_body.reshape((B * T * (J - 1), 3, 3))).reshape(
+            (B, T, (J - 1) * 3))
     pred_world_trans = x_pred_dict["trans"]
     pred_world_joints = x_pred_dict["joints"].reshape((B, T, J, 3))
 
@@ -388,7 +554,8 @@ def viz_eval_samp(
         viz_contacts[:, :, CONTACT_INDS] = pred_contacts
         pred_contacts = viz_contacts
 
-    betas = meta["betas"].to(global_gt_dict[list(global_gt_dict.keys())[0]].device)
+    betas = meta["betas"].to(global_gt_dict[list(
+        global_gt_dict.keys())[0]].device)
 
     for b in range(B):
         bm_world = male_bm if meta["gender"][b] == "male" else female_bm

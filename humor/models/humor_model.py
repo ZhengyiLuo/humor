@@ -37,9 +37,14 @@ WORLD2ALIGN_NAME_CACHE = {
 }
 
 
-def step(
-    model, loss_func, data, dataset, device, cur_epoch, mode="train", use_gt_p=1.0
-):
+def step(model,
+         loss_func,
+         data,
+         dataset,
+         device,
+         cur_epoch,
+         mode="train",
+         use_gt_p=1.0):
     """
     Given data for the current training step (batch),
     pulls out the necessary needed data,
@@ -78,9 +83,8 @@ def step(
         # in scheduled sampling or fully autoregressive phase
         init_input_dict = dict()
         for k in input_dict.keys():
-            init_input_dict[k] = input_dict[k][
-                :, 0, :, :
-            ]  # only need first step for init
+            init_input_dict[k] = input_dict[
+                k][:, 0, :, :]  # only need first step for init
         # this out_dict is the global state
         sched_samp_out = model.scheduled_sampling(
             x_past,
@@ -114,14 +118,16 @@ def step(
         gt_dict[k] = gt_dict[k].reshape((B * T * S_out, -1))
 
     gender_in = np.broadcast_to(
-        np.array(meta["gender"]).reshape((B, 1, 1, 1)), (B, T, S_out, 1)
-    )
+        np.array(meta["gender"]).reshape((B, 1, 1, 1)), (B, T, S_out, 1))
     gender_in = gender_in.reshape((B * T * S_out, 1))
-    betas_in = meta["betas"].reshape((B, T, 1, -1)).expand((B, T, S_out, 16)).to(device)
+    betas_in = meta["betas"].reshape((B, T, 1, -1)).expand(
+        (B, T, S_out, 16)).to(device)
     betas_in = betas_in.reshape((B * T * S_out, 16))
-    loss, stats_dict = loss_func(
-        out_dict, gt_dict, cur_epoch, gender=gender_in, betas=betas_in
-    )
+    loss, stats_dict = loss_func(out_dict,
+                                 gt_dict,
+                                 cur_epoch,
+                                 gender=gender_in,
+                                 betas=betas_in)
 
     return loss, stats_dict
 
@@ -153,25 +159,27 @@ class HumorModel(nn.Module):
         self.output_delta = output_delta
 
         if self.steps_out > 1:
-            raise NotImplementedError("Only supported single step output currently.")
+            raise NotImplementedError(
+                "Only supported single step output currently.")
 
         if out_rot_rep not in OUT_ROT_REPS:
-            raise Exception(
-                "Not a valid output rotation representation: %s" % (out_rot_rep)
-            )
+            raise Exception("Not a valid output rotation representation: %s" %
+                            (out_rot_rep))
         if in_rot_rep not in IN_ROT_REPS:
-            raise Exception(
-                "Not a valid input rotation representation: %s" % (in_rot_rep)
-            )
+            raise Exception("Not a valid input rotation representation: %s" %
+                            (in_rot_rep))
         self.out_rot_rep = out_rot_rep
         self.in_rot_rep = in_rot_rep
 
         if posterior_arch not in POSTERIOR_OPTIONS:
-            raise Exception("Not a valid encoder architecture: %s" % (posterior_arch))
+            raise Exception("Not a valid encoder architecture: %s" %
+                            (posterior_arch))
         if decoder_arch not in DECODER_OPTIONS:
-            raise Exception("Not a valid decoder architecture: %s" % (decoder_arch))
+            raise Exception("Not a valid decoder architecture: %s" %
+                            (decoder_arch))
         if conditional_prior and prior_arch not in PRIOR_OPTIONS:
-            raise Exception("Not a valid prior architecture: %s" % (prior_arch))
+            raise Exception("Not a valid prior architecture: %s" %
+                            (prior_arch))
         self.posterior_arch = posterior_arch
         self.decoder_arch = decoder_arch
         self.prior_arch = prior_arch
@@ -183,15 +191,14 @@ class HumorModel(nn.Module):
         ) = None  # auxiliary data will be returned as part of the input/output dictionary, but not the actual network input/output tensor
         self.pred_contacts = False
         if (
-            model_data_config.find("contacts") >= 0
+                model_data_config.find("contacts") >= 0
         ):  # network is outputting contact classification as well and need to supervise, but not given as input to net.
             self.data_names.remove("contacts")
             self.aux_out_data_names = ["contacts"]
             self.pred_contacts = True
 
-        self.need_trans2joint = (
-            "joints" in self.data_names or "verts" in self.data_names
-        )
+        self.need_trans2joint = ("joints" in self.data_names
+                                 or "verts" in self.data_names)
         self.model_data_config = model_data_config
 
         self.input_rot_dim = ROT_REP_SIZE[self.in_rot_rep]
@@ -243,19 +250,24 @@ class HumorModel(nn.Module):
         print("Using decoder architecture: %s" % (self.decoder_arch))
         decoder_input_dim = past_data_dim + self.latent_size
         if self.decoder_arch == "mlp":
-            layer_list = [decoder_input_dim, 1024, 1024, 512, self.output_data_dim]
+            layer_list = [
+                decoder_input_dim, 1024, 1024, 512, self.output_data_dim
+            ]
             self.decoder = MLP(
                 layers=layer_list,
                 nonlinearity=nn.ReLU,
                 use_gn=True,
-                skip_input_idx=past_data_dim,  # skip connect the latent to every layer
+                skip_input_idx=
+                past_data_dim,  # skip connect the latent to every layer
             )
 
         # prior (if conditional, given past predict latent transition distribution)
         self.use_conditional_prior = conditional_prior
         if self.use_conditional_prior:
             print("Using prior architecture: %s" % (self.prior_arch))
-            layer_list = [past_data_dim, 1024, 1024, 1024, 1024, self.latent_size * 2]
+            layer_list = [
+                past_data_dim, 1024, 1024, 1024, 1024, self.latent_size * 2
+            ]
             self.prior_net = MLP(
                 layers=layer_list,  # mu and sigma output
                 nonlinearity=nn.ReLU,
@@ -272,17 +284,17 @@ class HumorModel(nn.Module):
                 "Using SMPL joints rather than regressed joints as input at each step for roll out and scheduled sampling..."
             )
             male_bm_path = os.path.join(SMPLH_PATH, "male/model.npz")
-            self.male_bm = BodyModel(
-                bm_path=male_bm_path, num_betas=16, batch_size=self.smpl_batch_size
-            )
+            self.male_bm = BodyModel(bm_path=male_bm_path,
+                                     num_betas=16,
+                                     batch_size=self.smpl_batch_size)
             female_bm_path = os.path.join(SMPLH_PATH, "female/model.npz")
-            self.female_bm = BodyModel(
-                bm_path=female_bm_path, num_betas=16, batch_size=self.smpl_batch_size
-            )
+            self.female_bm = BodyModel(bm_path=female_bm_path,
+                                       num_betas=16,
+                                       batch_size=self.smpl_batch_size)
             neutral_bm_path = os.path.join(SMPLH_PATH, "neutral/model.npz")
-            self.neutral_bm = BodyModel(
-                bm_path=neutral_bm_path, num_betas=16, batch_size=self.smpl_batch_size
-            )
+            self.neutral_bm = BodyModel(bm_path=neutral_bm_path,
+                                        num_betas=16,
+                                        batch_size=self.smpl_batch_size)
             self.bm_dict = {
                 "male": self.male_bm,
                 "female": self.female_bm,
@@ -324,7 +336,10 @@ class HumorModel(nn.Module):
 
         input_dict = None
         if return_input_dict:
-            input_dict = {k: v for k, v in zip(self.data_names, in_unnorm_data_list)}
+            input_dict = {
+                k: v
+                for k, v in zip(self.data_names, in_unnorm_data_list)
+            }
 
             if self.aux_in_data_names is not None:
                 for k in self.aux_in_data_names:
@@ -344,13 +359,17 @@ class HumorModel(nn.Module):
                 cur_unnorm_dat = cur_dat.reshape((B, T, self.steps_out, -1))
                 out_unnorm_data_list.append(cur_unnorm_dat)
             x_t = torch.cat(out_unnorm_data_list, axis=3)
-            gt_dict = {k: v for k, v in zip(self.data_names, out_unnorm_data_list)}
+            gt_dict = {
+                k: v
+                for k, v in zip(self.data_names, out_unnorm_data_list)
+            }
 
             if self.aux_out_data_names is not None:
                 for k in self.aux_out_data_names:
                     cur_dat = data_out[k].to(device)
                     B, T = cur_dat.size(0), cur_dat.size(1)
-                    cur_unnorm_dat = cur_dat.reshape((B, T, self.steps_out, -1))
+                    cur_unnorm_dat = cur_dat.reshape(
+                        (B, T, self.steps_out, -1))
                     gt_dict[k] = cur_unnorm_dat
 
             return_list = [x_past, x_t, gt_dict]
@@ -367,7 +386,8 @@ class HumorModel(nn.Module):
                     cur_dat = data_out[global_k].to(device)
                     B, T = cur_dat.size(0), cur_dat.size(1)
                     # expand each to have steps_out since originally they are just B x T x ... x D
-                    cur_dat = cur_dat.reshape((B, T, 1, -1)).expand_as(gt_dict[k])
+                    cur_dat = cur_dat.reshape(
+                        (B, T, 1, -1)).expand_as(gt_dict[k])
                     global_gt_dict[k] = cur_dat
 
                 if self.aux_out_data_names is not None:
@@ -376,7 +396,8 @@ class HumorModel(nn.Module):
                         cur_dat = data_out[global_k].to(device)
                         B, T = cur_dat.size(0), cur_dat.size(1)
                         # expand each to have steps_out since originally they are just B x T x ... x D
-                        cur_dat = cur_dat.reshape((B, T, 1, -1)).expand_as(gt_dict[k])
+                        cur_dat = cur_dat.reshape(
+                            (B, T, 1, -1)).expand_as(gt_dict[k])
                         global_gt_dict[k] = cur_dat
 
                 return_list.append(global_gt_dict)
@@ -407,9 +428,8 @@ class HumorModel(nn.Module):
         name_list = self.data_names
         if self.aux_out_data_names is not None:
             name_list = name_list + self.aux_out_data_names
-        idx_list = (
-            self.delta_output_dim_list if self.output_delta else self.output_dim_list
-        )
+        idx_list = (self.delta_output_dim_list
+                    if self.output_delta else self.output_dim_list)
         out_dict = dict()
         sidx = 0
         for cur_name, cur_idx in zip(name_list, idx_list):
@@ -421,12 +441,10 @@ class HumorModel(nn.Module):
         if convert_rots and not self.output_delta:  # output delta already gives rotmats
             if "root_orient" in self.data_names:
                 out_dict["root_orient"] = convert_to_rotmat(
-                    out_dict["root_orient"], rep=self.out_rot_rep
-                )
+                    out_dict["root_orient"], rep=self.out_rot_rep)
             if "pose_body" in self.data_names:
                 out_dict["pose_body"] = convert_to_rotmat(
-                    out_dict["pose_body"], rep=self.out_rot_rep
-                )
+                    out_dict["pose_body"], rep=self.out_rot_rep)
 
         return out_dict
 
@@ -475,8 +493,7 @@ class HumorModel(nn.Module):
         # decode to get next step
         decoder_out = self.decode(z, past_in)
         decoder_out = decoder_out.reshape(
-            (B, self.steps_out, -1)
-        )  # B x steps_out x D_out
+            (B, self.steps_out, -1))  # B x steps_out x D_out
 
         # split output predictions and transform out rotations to matrices
         x_pred_dict = self.split_output(decoder_out)
@@ -494,8 +511,8 @@ class HumorModel(nn.Module):
         - past_in (B x steps_in*D)
         """
         prior_out = self.prior_net(past_in)
-        mean = prior_out[:, : self.latent_size]
-        logvar = prior_out[:, self.latent_size :]
+        mean = prior_out[:, :self.latent_size]
+        logvar = prior_out[:, self.latent_size:]
         var = torch.exp(logvar)
         return mean, var
 
@@ -510,8 +527,8 @@ class HumorModel(nn.Module):
         encoder_in = torch.cat([past_in, t_in], axis=1)
 
         encoder_out = self.encoder(encoder_in)
-        mean = encoder_out[:, : self.latent_size]
-        logvar = encoder_out[:, self.latent_size :]
+        mean = encoder_out[:, :self.latent_size]
+        logvar = encoder_out[:, self.latent_size:]
         var = torch.exp(logvar)
 
         return mean, var
@@ -541,18 +558,17 @@ class HumorModel(nn.Module):
 
         if self.output_delta:
             # network output is the residual, add to the input to get final output
-            step_in = past_in.reshape((B, self.steps_in, -1))[
-                :, -1:, :
-            ]  # most recent input step
+            step_in = past_in.reshape(
+                (B, self.steps_in, -1))[:, -1:, :]  # most recent input step
 
             final_out_list = []
             in_sidx = out_sidx = 0
             decode_out_dim_list = self.output_dim_list
             if self.pred_contacts:
-                decode_out_dim_list = decode_out_dim_list[:-1]  # do contacts separately
+                decode_out_dim_list = decode_out_dim_list[:
+                                                          -1]  # do contacts separately
             for in_dim_idx, out_dim_idx, data_name in zip(
-                self.input_dim_list, decode_out_dim_list, self.data_names
-            ):
+                    self.input_dim_list, decode_out_dim_list, self.data_names):
                 in_eidx = in_sidx + in_dim_idx
                 out_eidx = out_sidx + out_dim_idx
 
@@ -568,8 +584,8 @@ class HumorModel(nn.Module):
                     out_val = out_val.reshape((B, self.steps_out, -1, 3, 3))
 
                     rot_in = torch.matmul(out_val, in_val).reshape(
-                        (B, self.steps_out, -1)
-                    )  # rotate by predicted residual
+                        (B, self.steps_out,
+                         -1))  # rotate by predicted residual
                     final_out_list.append(rot_in)
                 else:
                     final_out_list.append(out_val + in_val)
@@ -615,18 +631,18 @@ class HumorModel(nn.Module):
         past_in = x_past[:, 0, :, :].reshape((B, -1))
         t_in = x_t[:, 0, :, :].reshape((B, -1))
 
-        global_world2local_rot = (
-            torch.eye(3).reshape((1, 1, 3, 3)).expand((B, 1, 3, 3)).to(x_past)
-        )
+        global_world2local_rot = (torch.eye(3).reshape((1, 1, 3, 3)).expand(
+            (B, 1, 3, 3)).to(x_past))
         global_world2local_trans = torch.zeros((B, 1, 3)).to(x_past)
         trans2joint = torch.zeros((B, 1, 1, 3)).to(x_past)
         if self.need_trans2joint:
             trans2joint = -torch.cat(
-                [cur_input_dict["joints"][:, -1, :2], torch.zeros((B, 1)).to(x_past)],
+                [
+                    cur_input_dict["joints"][:, -1, :2],
+                    torch.zeros((B, 1)).to(x_past)
+                ],
                 axis=1,
-            ).reshape(
-                (B, 1, 1, 3)
-            )  # same for whole sequence
+            ).reshape((B, 1, 1, 3))  # same for whole sequence
         pred_local_seq = []
         pred_global_seq = []
         for t in range(T):
@@ -642,17 +658,18 @@ class HumorModel(nn.Module):
                 # this assumes the model is actually outputting everything we need to run SMPL
                 # also assumes single output step
                 smpl_trans = x_pred_dict["trans"][:, 0:1].reshape(
-                    (B, 3)
-                )  # only want immediate next frame
+                    (B, 3))  # only want immediate next frame
                 smpl_root_orient = rotation_matrix_to_angle_axis(
-                    x_pred_dict["root_orient"][:, 0:1].reshape((B, 3, 3))
-                ).reshape((B, 3))
+                    x_pred_dict["root_orient"][:, 0:1].reshape(
+                        (B, 3, 3))).reshape((B, 3))
                 smpl_betas = betas[:, 0, :]
                 smpl_pose_body = rotation_matrix_to_angle_axis(
-                    x_pred_dict["pose_body"][:, 0:1].reshape((B * (J - 1), 3, 3))
-                ).reshape((B, (J - 1) * 3))
+                    x_pred_dict["pose_body"][:, 0:1].reshape(
+                        (B * (J - 1), 3, 3))).reshape((B, (J - 1) * 3))
 
-                smpl_vals = [smpl_trans, smpl_root_orient, smpl_betas, smpl_pose_body]
+                smpl_vals = [
+                    smpl_trans, smpl_root_orient, smpl_betas, smpl_pose_body
+                ]
                 # batch may be a mix of genders, so need to carefully use the corresponding SMPL body model
                 gender_names = ["male", "female", "neutral"]
                 pred_joints = []
@@ -662,9 +679,9 @@ class HumorModel(nn.Module):
                     gender_idx = np.array(gender) == gender_name
                     nbidx = np.sum(gender_idx)
 
-                    cat_idx_map[gender_idx] = np.arange(
-                        prev_nbidx, prev_nbidx + nbidx, dtype=np.int
-                    )
+                    cat_idx_map[gender_idx] = np.arange(prev_nbidx,
+                                                        prev_nbidx + nbidx,
+                                                        dtype=np.int)
                     prev_nbidx += nbidx
 
                     gender_smpl_vals = [val[gender_idx] for val in smpl_vals]
@@ -697,9 +714,9 @@ class HumorModel(nn.Module):
                         pred_joints.append(pred_body.Jtr)
 
                 # cat all genders and reorder to original batch ordering
-                x_pred_smpl_joints = torch.cat(pred_joints, axis=0)[
-                    :, : len(SMPL_JOINTS), :
-                ].reshape((B, 1, -1))
+                x_pred_smpl_joints = torch.cat(
+                    pred_joints, axis=0)[:, :len(SMPL_JOINTS), :].reshape(
+                        (B, 1, -1))
                 x_pred_smpl_joints = x_pred_smpl_joints[cat_idx_map]
 
             # prepare predicted input to next step in case needed
@@ -710,30 +727,30 @@ class HumorModel(nn.Module):
                     # drop oldest frame and add new prediction
                     keep_frames = cur_input_dict[k][:, 1:, :]
                     # print(keep_frames.size())
-                    if (
-                        k == "joints"
-                        and self.use_smpl_joint_inputs
-                        and x_pred_smpl_joints is not None
-                    ):
+                    if (k == "joints" and self.use_smpl_joint_inputs
+                            and x_pred_smpl_joints is not None):
                         # print('Using SMPL joints rather than regressed joints...')
                         if self.detach_sched_samp:
                             cur_input_dict[k] = torch.cat(
-                                [keep_frames, x_pred_smpl_joints.detach()], axis=1
-                            )
+                                [keep_frames,
+                                 x_pred_smpl_joints.detach()],
+                                axis=1)
                         else:
                             cur_input_dict[k] = torch.cat(
-                                [keep_frames, x_pred_smpl_joints], axis=1
-                            )
+                                [keep_frames, x_pred_smpl_joints], axis=1)
                     else:
                         if self.detach_sched_samp:
                             cur_input_dict[k] = torch.cat(
-                                [keep_frames, x_pred_dict[k][:, 0:1, :].detach()],
+                                [
+                                    keep_frames,
+                                    x_pred_dict[k][:, 0:1, :].detach()
+                                ],
                                 axis=1,
                             )
                         else:
                             cur_input_dict[k] = torch.cat(
-                                [keep_frames, x_pred_dict[k][:, 0:1, :]], axis=1
-                            )
+                                [keep_frames, x_pred_dict[k][:, 0:1, :]],
+                                axis=1)
                     # print(cur_input_dict[k].size())
                 else:
                     del_keys.append(k)
@@ -742,9 +759,8 @@ class HumorModel(nn.Module):
 
             # get world2aligned rot and translation
             if self.detach_sched_samp:
-                root_orient_mat = (
-                    x_pred_dict["root_orient"][:, 0, :].reshape((B, 3, 3)).detach()
-                )
+                root_orient_mat = (x_pred_dict["root_orient"][:, 0, :].reshape(
+                    (B, 3, 3)).detach())
                 world2aligned_rot = compute_world2aligned_mat(root_orient_mat)
                 world2aligned_trans = torch.cat(
                     [
@@ -754,10 +770,14 @@ class HumorModel(nn.Module):
                     axis=1,
                 )
             else:
-                root_orient_mat = x_pred_dict["root_orient"][:, 0, :].reshape((B, 3, 3))
+                root_orient_mat = x_pred_dict["root_orient"][:, 0, :].reshape(
+                    (B, 3, 3))
                 world2aligned_rot = compute_world2aligned_mat(root_orient_mat)
                 world2aligned_trans = torch.cat(
-                    [-x_pred_dict["trans"][:, 0, :2], torch.zeros((B, 1)).to(x_past)],
+                    [
+                        -x_pred_dict["trans"][:, 0, :2],
+                        torch.zeros((B, 1)).to(x_past)
+                    ],
                     axis=1,
                 )
 
@@ -776,24 +796,25 @@ class HumorModel(nn.Module):
             # convert rots to correct input format
             if self.in_rot_rep == "aa":
                 if "root_orient" in self.data_names:
-                    cur_input_dict["root_orient"] = rotation_matrix_to_angle_axis(
-                        cur_input_dict["root_orient"].reshape((B * S, 3, 3))
-                    ).reshape((B, S, 3))
+                    cur_input_dict[
+                        "root_orient"] = rotation_matrix_to_angle_axis(
+                            cur_input_dict["root_orient"].reshape(
+                                (B * S, 3, 3))).reshape((B, S, 3))
                 if "pose_body" in self.data_names:
-                    cur_input_dict["pose_body"] = rotation_matrix_to_angle_axis(
-                        cur_input_dict["pose_body"].reshape((B * S * (J - 1), 3, 3))
-                    ).reshape((B, S, (J - 1) * 3))
+                    cur_input_dict[
+                        "pose_body"] = rotation_matrix_to_angle_axis(
+                            cur_input_dict["pose_body"].reshape(
+                                (B * S * (J - 1), 3, 3))).reshape(
+                                    (B, S, (J - 1) * 3))
             elif self.in_rot_rep == "6d":
                 if "root_orient" in self.data_names:
-                    cur_input_dict["root_orient"] = cur_input_dict["root_orient"][
-                        :, :, :6
-                    ]
+                    cur_input_dict["root_orient"] = cur_input_dict[
+                        "root_orient"][:, :, :6]
                 if "pose_body" in self.data_names:
                     cur_input_dict["pose_body"] = (
-                        cur_input_dict["pose_body"]
-                        .reshape((B, S, J - 1, 9))[:, :, :, :6]
-                        .reshape((B, S, (J - 1) * 6))
-                    )
+                        cur_input_dict["pose_body"].reshape(
+                            (B, S, J - 1, 9))[:, :, :, :6].reshape(
+                                (B, S, (J - 1) * 6)))
 
             if need_global_out:
                 #
@@ -827,8 +848,8 @@ class HumorModel(nn.Module):
                     )
 
                 global_world2local_rot = torch.matmul(
-                    global_world2local_rot, world2aligned_rot.reshape((B, 1, 3, 3))
-                )
+                    global_world2local_rot,
+                    world2aligned_rot.reshape((B, 1, 3, 3)))
 
                 pred_global_seq.append(cur_world_dict)
 
@@ -854,17 +875,26 @@ class HumorModel(nn.Module):
             for k in pred_global_seq[0].keys():
                 if k == "posterior_distrib" or k == "prior_distrib":
                     m = torch.stack(
-                        [pred_global_seq[i][k][0] for i in range(len(pred_global_seq))],
+                        [
+                            pred_global_seq[i][k][0]
+                            for i in range(len(pred_global_seq))
+                        ],
                         axis=1,
                     )
                     v = torch.stack(
-                        [pred_global_seq[i][k][1] for i in range(len(pred_global_seq))],
+                        [
+                            pred_global_seq[i][k][1]
+                            for i in range(len(pred_global_seq))
+                        ],
                         axis=1,
                     )
                     pred_global_seq_out[k] = (m, v)
                 else:
                     pred_global_seq_out[k] = torch.stack(
-                        [pred_global_seq[i][k] for i in range(len(pred_global_seq))],
+                        [
+                            pred_global_seq[i][k]
+                            for i in range(len(pred_global_seq))
+                        ],
                         axis=1,
                     )
 
@@ -874,18 +904,24 @@ class HumorModel(nn.Module):
             # print(k)
             if k == "posterior_distrib" or k == "prior_distrib":
                 m = torch.stack(
-                    [pred_local_seq[i][k][0] for i in range(len(pred_local_seq))],
+                    [
+                        pred_local_seq[i][k][0]
+                        for i in range(len(pred_local_seq))
+                    ],
                     axis=1,
                 )
                 v = torch.stack(
-                    [pred_local_seq[i][k][1] for i in range(len(pred_local_seq))],
+                    [
+                        pred_local_seq[i][k][1]
+                        for i in range(len(pred_local_seq))
+                    ],
                     axis=1,
                 )
                 pred_local_seq_out[k] = (m, v)
             else:
                 pred_local_seq_out[k] = torch.stack(
-                    [pred_local_seq[i][k] for i in range(len(pred_local_seq))], axis=1
-                )
+                    [pred_local_seq[i][k] for i in range(len(pred_local_seq))],
+                    axis=1)
 
         if need_global_out:
             return pred_global_seq_out, pred_local_seq_out
@@ -927,30 +963,27 @@ class HumorModel(nn.Module):
             if k in ["root_orient"]:
                 # rot: B x S x 3 x 3 sized rotation matrix input
                 input_mat = input_dict[k].reshape(
-                    (B, S, 3, 3)
-                )  # make sure not B x S x 9
+                    (B, S, 3, 3))  # make sure not B x S x 9
                 if invert:
-                    output_dict[k] = torch.matmul(local2world_rot, input_mat).reshape(
-                        (B, S, 9)
-                    )
+                    output_dict[k] = torch.matmul(local2world_rot,
+                                                  input_mat).reshape((B, S, 9))
                 else:
-                    output_dict[k] = torch.matmul(world2local_rot, input_mat).reshape(
-                        (B, S, 9)
-                    )
+                    output_dict[k] = torch.matmul(world2local_rot,
+                                                  input_mat).reshape((B, S, 9))
             elif k in ["trans"]:
                 # trans + rot : B x S x 3
                 input_trans = input_dict[k]
                 if invert:
                     output_trans = torch.matmul(
-                        local2world_rot, input_trans.reshape((B, S, 3, 1))
-                    )[:, :, :, 0]
+                        local2world_rot, input_trans.reshape(
+                            (B, S, 3, 1)))[:, :, :, 0]
                     output_trans = output_trans - world2local_trans
                     output_dict[k] = output_trans
                 else:
                     input_trans = input_trans + world2local_trans
                     output_dict[k] = torch.matmul(
-                        world2local_rot, input_trans.reshape((B, S, 3, 1))
-                    )[:, :, :, 0]
+                        world2local_rot, input_trans.reshape(
+                            (B, S, 3, 1)))[:, :, :, 0]
             elif k in ["joints", "verts"]:
                 # trans + joint + rot : B x S x J x 3
                 J = input_dict[k].size(2) // 3
@@ -961,18 +994,12 @@ class HumorModel(nn.Module):
                         local2world_rot.reshape((B, 1, 1, 3, 3)),
                         input_pts.reshape((B, S, J, 3, 1)),
                     )[:, :, :, :, 0]
-                    output_pts = (
-                        output_pts
-                        - trans2joint
-                        - world2local_trans.reshape((B, 1, 1, 3))
-                    )
+                    output_pts = (output_pts - trans2joint -
+                                  world2local_trans.reshape((B, 1, 1, 3)))
                     output_dict[k] = output_pts.reshape((B, S, J * 3))
                 else:
-                    input_pts = (
-                        input_pts
-                        + world2local_trans.reshape((B, 1, 1, 3))
-                        + trans2joint
-                    )
+                    input_pts = (input_pts + world2local_trans.reshape(
+                        (B, 1, 1, 3)) + trans2joint)
                     output_pts = torch.matmul(
                         world2local_rot.reshape((B, 1, 1, 3, 3)),
                         input_pts.reshape((B, S, J, 3, 1)),
@@ -985,30 +1012,27 @@ class HumorModel(nn.Module):
                 input_pts = input_dict[k].reshape((B, S, J, 3, 1))
                 if invert:
                     outuput_pts = torch.matmul(
-                        local2world_rot.reshape((B, 1, 1, 3, 3)), input_pts
-                    )[:, :, :, :, 0]
+                        local2world_rot.reshape((B, 1, 1, 3, 3)),
+                        input_pts)[:, :, :, :, 0]
                     output_dict[k] = outuput_pts.reshape((B, S, J * 3))
                 else:
                     output_pts = torch.matmul(
-                        world2local_rot.reshape((B, 1, 1, 3, 3)), input_pts
-                    )[:, :, :, :, 0]
+                        world2local_rot.reshape((B, 1, 1, 3, 3)),
+                        input_pts)[:, :, :, :, 0]
                     output_dict[k] = output_pts.reshape((B, S, J * 3))
             elif k in ["trans_vel", "root_orient_vel"]:
                 # rot : B x S x 3
                 input_pts = input_dict[k].reshape((B, S, 3, 1))
                 if invert:
-                    output_dict[k] = torch.matmul(local2world_rot, input_pts)[
-                        :, :, :, 0
-                    ]
+                    output_dict[k] = torch.matmul(local2world_rot,
+                                                  input_pts)[:, :, :, 0]
                 else:
-                    output_dict[k] = torch.matmul(world2local_rot, input_pts)[
-                        :, :, :, 0
-                    ]
+                    output_dict[k] = torch.matmul(world2local_rot,
+                                                  input_pts)[:, :, :, 0]
             else:
                 print(
                     "Received an unexpected key when transforming world2local: %s!"
-                    % (k)
-                )
+                    % (k))
                 exit()
 
         return output_dict
@@ -1019,14 +1043,23 @@ class HumorModel(nn.Module):
         """
         new_pad_list = []
         for pad_idx, pad_tensor in enumerate(pad_list):
-            padding = torch.zeros((pad_size, pad_tensor.size(1))).to(pad_tensor)
+            padding = torch.zeros(
+                (pad_size, pad_tensor.size(1))).to(pad_tensor)
             new_pad_list.append(torch.cat([pad_tensor, padding], dim=0))
         return new_pad_list
 
-
-    def roll_out(self, x_past, init_input_dict, num_steps, use_mean=False, 
-                    z_seq=None, return_prior=False, gender=None, betas=None, return_z=False,
-                    canonicalize_input=False):
+    def roll_out(self,
+                 x_past,
+                 init_input_dict,
+                 num_steps,
+                 use_mean=False,
+                 z_seq=None,
+                 return_prior=False,
+                 gender=None,
+                 betas=None,
+                 return_z=False,
+                 canonicalize_input=False,
+                 uncanonicalize_output=False):
         '''
         Given input for first step, roll out using own output the entire time by sampling from the prior.
         Returns the global trajectory.
@@ -1042,6 +1075,7 @@ class HumorModel(nn.Module):
         -betas : B x steps_in x D
         -return_z : returns the sampled z sequence in addition to the output
         - canonicalize_input : if true, the input initial state is assumed to not be in the local aligned coordinate system. It will be transformed before using.
+        - uncanonicalize_output : if true and canonicalize_input=True, will transform output back into the input frame rather than return in canonical frame.
         Returns: 
         - x_pred - dict of (B x num_steps x D_out) for each value. Rotations are all matrices.
         '''
@@ -1049,42 +1083,63 @@ class HumorModel(nn.Module):
         cur_input_dict = init_input_dict
 
         # need to transform init input to local frame
+        world2aligned_rot = world2aligned_trans = None
         if canonicalize_input:
             B, _, _ = cur_input_dict[list(cur_input_dict.keys())[0]].size()
             # must transform initial input into the local frame
             # get world2aligned rot and translation
-            world2aligned_rot = world2aligned_trans = None
             root_orient_mat = cur_input_dict['root_orient']
             pose_body_mat = cur_input_dict['pose_body']
             if 'root_orient' in self.data_names and self.in_rot_rep != 'mat':
-                root_orient_mat = convert_to_rotmat(root_orient_mat, rep=self.in_rot_rep)
+                root_orient_mat = convert_to_rotmat(root_orient_mat,
+                                                    rep=self.in_rot_rep)
             if 'pose_body' in self.data_names and self.in_rot_rep != 'mat':
-                pose_body_mat = convert_to_rotmat(pose_body_mat, rep=self.in_rot_rep)
+                pose_body_mat = convert_to_rotmat(pose_body_mat,
+                                                  rep=self.in_rot_rep)
 
-            root_orient_mat = root_orient_mat[:,-1].reshape((B, 3, 3))
+            root_orient_mat = root_orient_mat[:, -1].reshape((B, 3, 3))
             world2aligned_rot = compute_world2aligned_mat(root_orient_mat)
-            world2aligned_trans = torch.cat([-cur_input_dict['trans'][:,-1,:2], torch.zeros((B,1)).to(root_orient_mat)], axis=1)
+            world2aligned_trans = torch.cat([
+                -cur_input_dict['trans'][:, -1, :2],
+                torch.zeros((B, 1)).to(root_orient_mat)
+            ],
+                                            axis=1)
 
             # compute trans2joint
             if self.need_trans2joint:
-                trans2joint = -(cur_input_dict['joints'][:,-1,:2] + world2aligned_trans[:, :2])
-                trans2joint = torch.cat([trans2joint, torch.zeros((B, 1)).to(trans2joint)], axis=1).reshape((B,1,1,3))
+                trans2joint = -(cur_input_dict['joints'][:, -1, :2] +
+                                world2aligned_trans[:, :2])
+                trans2joint = torch.cat(
+                    [trans2joint,
+                     torch.zeros((B, 1)).to(trans2joint)], axis=1).reshape(
+                         (B, 1, 1, 3))
 
             # transform to local frame
-            cur_input_dict = self.apply_world2local_trans(world2aligned_trans, world2aligned_rot, trans2joint, cur_input_dict, cur_input_dict, invert=False)
+            cur_input_dict = self.apply_world2local_trans(world2aligned_trans,
+                                                          world2aligned_rot,
+                                                          trans2joint,
+                                                          cur_input_dict,
+                                                          cur_input_dict,
+                                                          invert=False)
 
         # check to make sure we have enough input steps, if not, pad
         pad_x_past = x_past is not None and x_past.size(1) < self.steps_in
-        pad_in_dict = cur_input_dict[list(cur_input_dict.keys())[0]].size(1) < self.steps_in
+        pad_in_dict = cur_input_dict[list(
+            cur_input_dict.keys())[0]].size(1) < self.steps_in
         if pad_x_past:
-            num_pad_steps = self.steps_in -  x_past.size(1)
-            cur_padding = torch.zeros((x_past.size(0), num_pad_steps, x_past.size(2))).to(x_past) # assuming all data is B x T x D
+            num_pad_steps = self.steps_in - x_past.size(1)
+            cur_padding = torch.zeros(
+                (x_past.size(0), num_pad_steps,
+                 x_past.size(2))).to(x_past)  # assuming all data is B x T x D
             x_past = torch.cat([cur_padding, x_past], axis=1)
         if pad_in_dict:
             for k in cur_input_dict.keys():
                 cur_in_dat = cur_input_dict[k]
                 num_pad_steps = self.steps_in - cur_in_dat.size(1)
-                cur_padding = torch.zeros((cur_in_dat.size(0), num_pad_steps, cur_in_dat.size(2))).to(cur_in_dat) # assuming all data is B x T x D
+                cur_padding = torch.zeros(
+                    (cur_in_dat.size(0), num_pad_steps,
+                     cur_in_dat.size(2))).to(
+                         cur_in_dat)  # assuming all data is B x T x D
                 padded_in_dat = torch.cat([cur_padding, cur_in_dat], axis=1)
                 cur_input_dict[k] = padded_in_dat
 
@@ -1094,11 +1149,20 @@ class HumorModel(nn.Module):
         B, S, D = x_past.size()
         past_in = x_past.reshape((B, -1))
 
-        global_world2local_rot = torch.eye(3).reshape((1, 1, 3, 3)).expand((B, 1, 3, 3)).to(x_past)
+        global_world2local_rot = torch.eye(3).reshape((1, 1, 3, 3)).expand(
+            (B, 1, 3, 3)).to(x_past)
         global_world2local_trans = torch.zeros((B, 1, 3)).to(x_past)
-        trans2joint = torch.zeros((B,1,1,3)).to(x_past)
+        if canonicalize_input and uncanonicalize_output:
+            global_world2local_rot = world2aligned_rot.unsqueeze(1)
+            global_world2local_trans = world2aligned_trans.unsqueeze(1)
+        trans2joint = torch.zeros((B, 1, 1, 3)).to(x_past)
         if self.need_trans2joint:
-            trans2joint = -torch.cat([cur_input_dict['joints'][:,-1,:2], torch.zeros((B, 1)).to(x_past)], axis=1).reshape((B,1,1,3)) # same for whole sequence
+            trans2joint = -torch.cat(
+                [
+                    cur_input_dict['joints'][:, -1, :2],
+                    torch.zeros((B, 1)).to(x_past)
+                ],
+                axis=1).reshape((B, 1, 1, 3))  # same for whole sequence
         pred_local_seq = []
         pred_global_seq = []
         prior_seq = []
@@ -1108,8 +1172,12 @@ class HumorModel(nn.Module):
             # sample next step
             z_in = None
             if z_seq is not None:
-                z_in = z_seq[:,t]
-            sample_out = self.sample_step(past_in, use_mean=use_mean, z=z_in, return_prior=return_prior, return_z=return_z)
+                z_in = z_seq[:, t]
+            sample_out = self.sample_step(past_in,
+                                          use_mean=use_mean,
+                                          z=z_in,
+                                          return_prior=return_prior,
+                                          return_z=return_z)
             if return_prior:
                 prior_out = sample_out['prior']
                 prior_seq.append(prior_out)
@@ -1123,7 +1191,7 @@ class HumorModel(nn.Module):
             if self.steps_out > 1:
                 for k in x_pred_dict.keys():
                     # only want immediate next frame prediction
-                    x_pred_dict[k] = x_pred_dict[k][:,0:1,:]
+                    x_pred_dict[k] = x_pred_dict[k][:, 0:1, :]
 
             pred_local_seq.append(x_pred_dict)
 
@@ -1133,46 +1201,61 @@ class HumorModel(nn.Module):
                 # this assumes the model is actually outputting everything we need to run SMPL
                 # also assumes single output step
                 smpl_trans = x_pred_dict['trans'].reshape((B, 3))
-                smpl_root_orient = rotation_matrix_to_angle_axis(x_pred_dict['root_orient'].reshape((B,3,3))).reshape((B, 3))
-                smpl_betas = betas[:,0,:]
-                smpl_pose_body = rotation_matrix_to_angle_axis(x_pred_dict['pose_body'].reshape((B*(J-1),3,3))).reshape((B, (J-1)*3))
+                smpl_root_orient = rotation_matrix_to_angle_axis(
+                    x_pred_dict['root_orient'].reshape((B, 3, 3))).reshape(
+                        (B, 3))
+                smpl_betas = betas[:, 0, :]
+                smpl_pose_body = rotation_matrix_to_angle_axis(
+                    x_pred_dict['pose_body'].reshape(
+                        (B * (J - 1), 3, 3))).reshape((B, (J - 1) * 3))
 
-                smpl_vals = [smpl_trans, smpl_root_orient, smpl_betas, smpl_pose_body]
+                smpl_vals = [
+                    smpl_trans, smpl_root_orient, smpl_betas, smpl_pose_body
+                ]
                 # each batch index may be a different gender
                 gender_names = ['male', 'female', 'neutral']
                 pred_joints = []
                 prev_nbidx = 0
-                cat_idx_map = np.ones((B), dtype=np.int)*-1
+                cat_idx_map = np.ones((B), dtype=np.int) * -1
                 for gender_name in gender_names:
                     gender_idx = np.array(gender) == gender_name
                     nbidx = np.sum(gender_idx)
-                    cat_idx_map[gender_idx] = np.arange(prev_nbidx, prev_nbidx + nbidx, dtype=np.int)
+                    cat_idx_map[gender_idx] = np.arange(prev_nbidx,
+                                                        prev_nbidx + nbidx,
+                                                        dtype=np.int)
                     prev_nbidx += nbidx
 
                     gender_smpl_vals = [val[gender_idx] for val in smpl_vals]
 
-                    # need to pad extra frames with zeros in case not as long as expected 
+                    # need to pad extra frames with zeros in case not as long as expected
                     pad_size = self.smpl_batch_size - nbidx
                     if pad_size == B:
                         # skip if no frames for this gender
                         continue
                     pad_list = gender_smpl_vals
                     if pad_size < 0:
-                        raise Exception('SMPL model batch size not large enough to accomodate!')
+                        raise Exception(
+                            'SMPL model batch size not large enough to accomodate!'
+                        )
                     elif pad_size > 0:
                         pad_list = self.zero_pad_tensors(pad_list, pad_size)
-                    
+
                     # reconstruct SMPL
                     cur_pred_trans, cur_pred_orient, cur_betas, cur_pred_pose = pad_list
                     bm = self.bm_dict[gender_name]
-                    pred_body = bm(pose_body=cur_pred_pose, betas=cur_betas, root_orient=cur_pred_orient, trans=cur_pred_trans)
+                    pred_body = bm(pose_body=cur_pred_pose,
+                                   betas=cur_betas,
+                                   root_orient=cur_pred_orient,
+                                   trans=cur_pred_trans)
                     if pad_size > 0:
                         pred_joints.append(pred_body.Jtr[:-pad_size])
                     else:
                         pred_joints.append(pred_body.Jtr)
 
                 # cat all genders and reorder to original batch ordering
-                x_pred_smpl_joints = torch.cat(pred_joints, axis=0)[:,:len(SMPL_JOINTS),:].reshape((B, 1, -1))
+                x_pred_smpl_joints = torch.cat(
+                    pred_joints, axis=0)[:, :len(SMPL_JOINTS), :].reshape(
+                        (B, 1, -1))
                 x_pred_smpl_joints = x_pred_smpl_joints[cat_idx_map]
 
             # prepare input to next step
@@ -1181,51 +1264,86 @@ class HumorModel(nn.Module):
             for k in cur_input_dict.keys():
                 if k in x_pred_dict:
                     # drop oldest frame and add new prediction
-                    keep_frames = cur_input_dict[k][:,1:,:]
+                    keep_frames = cur_input_dict[k][:, 1:, :]
                     # print(keep_frames.size())
 
                     if k == 'joints' and self.use_smpl_joint_inputs and x_pred_smpl_joints is not None:
-                        cur_input_dict[k] = torch.cat([keep_frames, x_pred_smpl_joints], axis=1)
+                        cur_input_dict[k] = torch.cat(
+                            [keep_frames, x_pred_smpl_joints], axis=1)
                     else:
-                        cur_input_dict[k] = torch.cat([keep_frames, x_pred_dict[k]], axis=1)
+                        cur_input_dict[k] = torch.cat(
+                            [keep_frames, x_pred_dict[k]], axis=1)
                 else:
                     del_keys.append(k)
             for k in del_keys:
                 del cur_input_dict[k]
 
             # get world2aligned rot and translation
-            root_orient_mat = x_pred_dict['root_orient'][:,0,:].reshape((B, 3, 3))
+            root_orient_mat = x_pred_dict['root_orient'][:, 0, :].reshape(
+                (B, 3, 3))
             world2aligned_rot = compute_world2aligned_mat(root_orient_mat)
-            world2aligned_trans = torch.cat([-x_pred_dict['trans'][:,0,:2], torch.zeros((B,1)).to(x_past)], axis=1)
+            world2aligned_trans = torch.cat([
+                -x_pred_dict['trans'][:, 0, :2],
+                torch.zeros((B, 1)).to(x_past)
+            ],
+                                            axis=1)
 
             #
             # transform inputs to this local frame (body pose is not affected) for next step
             #
-            cur_input_dict = self.apply_world2local_trans(world2aligned_trans, world2aligned_rot, trans2joint, cur_input_dict, cur_input_dict, invert=False)
+            cur_input_dict = self.apply_world2local_trans(world2aligned_trans,
+                                                          world2aligned_rot,
+                                                          trans2joint,
+                                                          cur_input_dict,
+                                                          cur_input_dict,
+                                                          invert=False)
 
             # convert rots to correct input format
             if self.in_rot_rep == 'aa':
                 if 'root_orient' in self.data_names:
-                    cur_input_dict['root_orient'] = rotation_matrix_to_angle_axis(cur_input_dict['root_orient'].reshape((B*S,3,3))).reshape((B, S, 3))
+                    cur_input_dict[
+                        'root_orient'] = rotation_matrix_to_angle_axis(
+                            cur_input_dict['root_orient'].reshape(
+                                (B * S, 3, 3))).reshape((B, S, 3))
                 if 'pose_body' in self.data_names:
-                    cur_input_dict['pose_body'] = rotation_matrix_to_angle_axis(cur_input_dict['pose_body'].reshape((B*S*(J-1),3,3))).reshape((B, S, (J-1)*3))
+                    cur_input_dict[
+                        'pose_body'] = rotation_matrix_to_angle_axis(
+                            cur_input_dict['pose_body'].reshape(
+                                (B * S * (J - 1), 3, 3))).reshape(
+                                    (B, S, (J - 1) * 3))
             elif self.in_rot_rep == '6d':
                 if 'root_orient' in self.data_names:
-                    cur_input_dict['root_orient'] = cur_input_dict['root_orient'][:,:,:6]
+                    cur_input_dict['root_orient'] = cur_input_dict[
+                        'root_orient'][:, :, :6]
                 if 'pose_body' in self.data_names:
-                    cur_input_dict['pose_body'] = cur_input_dict['pose_body'].reshape((B, S, J-1, 9))[:,:,:,:6].reshape((B, S, (J-1)*6))
+                    cur_input_dict['pose_body'] = cur_input_dict[
+                        'pose_body'].reshape(
+                            (B, S, J - 1, 9))[:, :, :, :6].reshape(
+                                (B, S, (J - 1) * 6))
 
             #
             # compute current world output and update world2local transform
             #
             cur_world_dict = dict()
-            cur_world_dict = self.apply_world2local_trans(global_world2local_trans, global_world2local_rot, trans2joint, x_pred_dict, cur_world_dict, invert=True)
+            cur_world_dict = self.apply_world2local_trans(
+                global_world2local_trans,
+                global_world2local_rot,
+                trans2joint,
+                x_pred_dict,
+                cur_world_dict,
+                invert=True)
             #
             # update world2local transform
             #
-            global_world2local_trans = torch.cat([-cur_world_dict['trans'][:,0:1,:2], torch.zeros((B, 1, 1)).to(x_past)], axis=2)
+            global_world2local_trans = torch.cat([
+                -cur_world_dict['trans'][:, 0:1, :2],
+                torch.zeros((B, 1, 1)).to(x_past)
+            ],
+                                                 axis=2)
             # print(world2aligned_rot)
-            global_world2local_rot = torch.matmul(global_world2local_rot, world2aligned_rot.reshape((B, 1, 3, 3)))
+            global_world2local_rot = torch.matmul(
+                global_world2local_rot, world2aligned_rot.reshape(
+                    (B, 1, 3, 3)))
 
             pred_global_seq.append(cur_world_dict)
 
@@ -1239,17 +1357,21 @@ class HumorModel(nn.Module):
         # aggregate global pred_seq
         pred_seq_out = dict()
         for k in pred_global_seq[0].keys():
-            pred_seq_out[k] = torch.cat([pred_global_seq[i][k] for i in range(len(pred_global_seq))], axis=1)
+            pred_seq_out[k] = torch.cat(
+                [pred_global_seq[i][k] for i in range(len(pred_global_seq))],
+                axis=1)
 
         if return_z:
             z_out_seq = torch.stack(z_out_seq, dim=1)
             pred_seq_out['z'] = z_out_seq
 
         if return_prior:
-            pm = torch.stack([prior_seq[i][0] for i in range(len(prior_seq))], axis=1)
-            pv = torch.stack([prior_seq[i][1] for i in range(len(prior_seq))], axis=1)
+            pm = torch.stack([prior_seq[i][0] for i in range(len(prior_seq))],
+                             axis=1)
+            pv = torch.stack([prior_seq[i][1] for i in range(len(prior_seq))],
+                             axis=1)
             return pred_seq_out, (pm, pv)
-        else:   
+        else:
             return pred_seq_out
 
     def roll_out_single(
@@ -1278,10 +1400,8 @@ class HumorModel(nn.Module):
         past_in = x_past.reshape((B, -1))
 
         global_world2local_rot = compute_world2aligned_mat(
-            curr_global_dict["root_orient"][:, 0, :].reshape((B, 3, 3))
-        ).to(
-            x_past
-        )  #### ZL : potentail bug here!!!
+            curr_global_dict["root_orient"][:, 0, :].reshape(
+                (B, 3, 3))).to(x_past)  #### ZL : potentail bug here!!!
 
         global_world2local_trans = torch.cat(
             [
@@ -1338,17 +1458,14 @@ class HumorModel(nn.Module):
                 keep_frames = cur_input_dict[k][:, 1:, :]
                 # print(keep_frames.size())
 
-                if (
-                    k == "joints"
-                    and self.use_smpl_joint_inputs
-                    and x_pred_smpl_joints is not None
-                ):
+                if (k == "joints" and self.use_smpl_joint_inputs
+                        and x_pred_smpl_joints is not None):
 
                     cur_input_dict[k] = torch.cat(
-                        [keep_frames, x_pred_smpl_joints], axis=1
-                    )
+                        [keep_frames, x_pred_smpl_joints], axis=1)
                 else:
-                    cur_input_dict[k] = torch.cat([keep_frames, x_pred_dict[k]], axis=1)
+                    cur_input_dict[k] = torch.cat(
+                        [keep_frames, x_pred_dict[k]], axis=1)
             else:
                 del_keys.append(k)
 
@@ -1356,10 +1473,12 @@ class HumorModel(nn.Module):
             del cur_input_dict[k]
 
         # get world2aligned rot and translation
-        root_orient_mat = x_pred_dict["root_orient"][:, 0, :].reshape((B, 3, 3))
+        root_orient_mat = x_pred_dict["root_orient"][:, 0, :].reshape(
+            (B, 3, 3))
         world2aligned_rot = compute_world2aligned_mat(root_orient_mat)
         world2aligned_trans = torch.cat(
-            [-x_pred_dict["trans"][:, 0, :2], torch.zeros((B, 1)).to(x_past)],
+            [-x_pred_dict["trans"][:, 0, :2],
+             torch.zeros((B, 1)).to(x_past)],
             axis=1,
         )
 
@@ -1379,21 +1498,21 @@ class HumorModel(nn.Module):
         if self.in_rot_rep == "aa":
             if "root_orient" in self.data_names:
                 cur_input_dict["root_orient"] = rotation_matrix_to_angle_axis(
-                    cur_input_dict["root_orient"].reshape((B * S, 3, 3))
-                ).reshape((B, S, 3))
+                    cur_input_dict["root_orient"].reshape(
+                        (B * S, 3, 3))).reshape((B, S, 3))
             if "pose_body" in self.data_names:
                 cur_input_dict["pose_body"] = rotation_matrix_to_angle_axis(
-                    cur_input_dict["pose_body"].reshape((B * S * (J - 1), 3, 3))
-                ).reshape((B, S, (J - 1) * 3))
+                    cur_input_dict["pose_body"].reshape(
+                        (B * S * (J - 1), 3, 3))).reshape((B, S, (J - 1) * 3))
         elif self.in_rot_rep == "6d":
             if "root_orient" in self.data_names:
-                cur_input_dict["root_orient"] = cur_input_dict["root_orient"][:, :, :6]
+                cur_input_dict["root_orient"] = cur_input_dict[
+                    "root_orient"][:, :, :6]
             if "pose_body" in self.data_names:
                 cur_input_dict["pose_body"] = (
-                    cur_input_dict["pose_body"]
-                    .reshape((B, S, J - 1, 9))[:, :, :, :6]
-                    .reshape((B, S, (J - 1) * 6))
-                )
+                    cur_input_dict["pose_body"].reshape(
+                        (B, S, J - 1, 9))[:, :, :, :6].reshape(
+                            (B, S, (J - 1) * 6)))
 
         #
         # compute current world output and update world2local transform
@@ -1479,12 +1598,10 @@ class HumorModel(nn.Module):
                 z = self.rsample(pm, pv)
             else:
                 z = pm  # NOTE: use mean
-
         # decode to get next step
         decoder_out = self.decode(z, past_in)
         decoder_out = decoder_out.reshape(
-            (B, self.steps_out, -1)
-        )  # B x steps_out x D_out
+            (B, self.steps_out, -1))  # B x steps_out x D_out
 
         out_dict = {"decoder_out": decoder_out}
         if return_prior:
@@ -1518,7 +1635,8 @@ class HumorModel(nn.Module):
             # get world2aligned rot and translation
             world2aligned_rot = world2aligned_trans = None
 
-            root_orient_mat = global_seq["root_orient"][:, t, :].reshape((B, 3, 3))
+            root_orient_mat = global_seq["root_orient"][:, t, :].reshape(
+                (B, 3, 3))
             world2aligned_rot = compute_world2aligned_mat(root_orient_mat)
             world2aligned_trans = torch.cat(
                 [
@@ -1534,34 +1652,34 @@ class HumorModel(nn.Module):
                     global_seq["joints"][:, t, :2] + world2aligned_trans[:, :2]
                 )  # we cannot make the assumption that the first frame is already canonical
                 trans2joint = torch.cat(
-                    [trans2joint, torch.zeros((B, 1)).to(trans2joint)], axis=1
-                ).reshape((B, 1, 1, 3))
+                    [trans2joint,
+                     torch.zeros((B, 1)).to(trans2joint)], axis=1).reshape(
+                         (B, 1, 1, 3))
 
             # get current window
             cur_data_dict = dict()
             for k in global_seq.keys():
                 # get in steps
                 in_sidx = max(0, t - self.steps_in + 1)
-                cur_in_seq = global_seq[k][:, in_sidx : (t + 1), :]
+                cur_in_seq = global_seq[k][:, in_sidx:(t + 1), :]
                 if cur_in_seq.size(1) < self.steps_in:
                     # must zero pad front
                     num_pad_steps = self.steps_in - cur_in_seq.size(1)
                     cur_padding = torch.zeros(
-                        (cur_in_seq.size(0), num_pad_steps, cur_in_seq.size(2))
-                    ).to(
-                        cur_in_seq
-                    )  # assuming all data is B x T x D
+                        (cur_in_seq.size(0), num_pad_steps,
+                         cur_in_seq.size(2))).to(
+                             cur_in_seq)  # assuming all data is B x T x D
                     cur_in_seq = torch.cat([cur_padding, cur_in_seq], axis=1)
 
                 # get out steps
-                cur_out_seq = global_seq[k][
-                    :, (t + 1) : (t + 2 + needed_future_steps) : self.out_step_size
-                ]
+                cur_out_seq = global_seq[k][:, (t + 1):(
+                    t + 2 + needed_future_steps):self.out_step_size]
                 if cur_out_seq.size(1) < self.steps_out:
                     # zero pad
                     num_pad_steps = self.steps_out - cur_out_seq.size(1)
                     cur_padding = torch.zeros_like(cur_out_seq[:, 0])
-                    cur_padding = torch.stack([cur_padding] * num_pad_steps, axis=1)
+                    cur_padding = torch.stack([cur_padding] * num_pad_steps,
+                                              axis=1)
                     cur_out_seq = torch.cat([cur_out_seq, cur_padding], axis=1)
                 cur_data_dict[k] = torch.cat([cur_in_seq, cur_out_seq], axis=1)
 
@@ -1579,12 +1697,12 @@ class HumorModel(nn.Module):
             # cat all inputs together to form past_in
             in_data_list = []
             for k in self.data_names:
-                in_data_list.append(cur_data_dict[k][:, : self.steps_in, :])
+                in_data_list.append(cur_data_dict[k][:, :self.steps_in, :])
             x_past = torch.cat(in_data_list, axis=2)
             # cat all outputs together to form x_t
             out_data_list = []
             for k in self.data_names:
-                out_data_list.append(cur_data_dict[k][:, self.steps_in :, :])
+                out_data_list.append(cur_data_dict[k][:, self.steps_in:, :])
             x_t = torch.cat(out_data_list, axis=2)
 
             if full_forward_pass:
@@ -1606,18 +1724,25 @@ class HumorModel(nn.Module):
                 # print(k)
                 if k == "posterior_distrib" or k == "prior_distrib":
                     m = torch.stack(
-                        [pred_dict_seq[i][k][0] for i in range(len(pred_dict_seq))],
+                        [
+                            pred_dict_seq[i][k][0]
+                            for i in range(len(pred_dict_seq))
+                        ],
                         axis=1,
                     )
                     v = torch.stack(
-                        [pred_dict_seq[i][k][1] for i in range(len(pred_dict_seq))],
+                        [
+                            pred_dict_seq[i][k][1]
+                            for i in range(len(pred_dict_seq))
+                        ],
                         axis=1,
                     )
                     pred_seq_out[k] = (m, v)
                 else:
-                    pred_seq_out[k] = torch.stack(
-                        [pred_dict_seq[i][k] for i in range(len(pred_dict_seq))], axis=1
-                    )
+                    pred_seq_out[k] = torch.stack([
+                        pred_dict_seq[i][k] for i in range(len(pred_dict_seq))
+                    ],
+                                                  axis=1)
 
             return pred_seq_out
         else:
@@ -1692,9 +1817,8 @@ class MLP(nn.Module):
         skip_size = 0 if skip_input_idx is None else (in_size - skip_input_idx)
         # now the rest
         for layer_idx in range(1, len(out_channels)):
-            fc_layer = nn.Linear(
-                out_channels[layer_idx - 1] + skip_size, out_channels[layer_idx]
-            )
+            fc_layer = nn.Linear(out_channels[layer_idx - 1] + skip_size,
+                                 out_channels[layer_idx])
             if use_gn:
                 bn_layer = nn.GroupNorm(16, out_channels[layer_idx - 1])
                 layers.append(bn_layer)
@@ -1708,13 +1832,10 @@ class MLP(nn.Module):
         """
         skip_in = None
         if self.skip_input_idx is not None:
-            skip_in = x[:, self.skip_input_idx :]
+            skip_in = x[:, self.skip_input_idx:]
         for i, layer in enumerate(self.net):
-            if (
-                self.skip_input_idx is not None
-                and i > 0
-                and isinstance(layer, nn.Linear)
-            ):
+            if (self.skip_input_idx is not None and i > 0
+                    and isinstance(layer, nn.Linear)):
                 x = torch.cat([x, skip_in], dim=1)
             x = layer(x)
         return x

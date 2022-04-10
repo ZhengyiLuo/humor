@@ -276,7 +276,7 @@ class ProxDataset(Dataset):
 
             seq_intervals += seq_interval
         # return img_path_list, subseq_idx_list, seq_intervals
-        start, end = 34, 36
+        # start, end = 34, 36
         return img_path_list[start:end], subseq_idx_list[start:end], seq_intervals[start:end]
 
     def get_data_paths_from_img(self, img_paths):

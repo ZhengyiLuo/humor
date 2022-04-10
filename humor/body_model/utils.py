@@ -3,7 +3,7 @@ import numpy as np
 import torch
 
 SMPL_JOINTS = {'hips' : 0, 'leftUpLeg' : 1, 'rightUpLeg' : 2, 'spine' : 3, 'leftLeg' : 4, 'rightLeg' : 5,
-                'spine1' : 6, 'leftFoot' : 7, 'rightFoot' : 8, 'spine2' : 9, 'leftToeBase' : 10, 'rightToeBase' : 11, 
+                'spine1' : 6, 'leftFoot' : 7, 'rightFoot' : 8, 'spine2' : 9, 'leftToeBase' : 10, 'rightToeBase' : 11,
                 'neck' : 12, 'leftShoulder' : 13, 'rightShoulder' : 14, 'head' : 15, 'leftArm' : 16, 'rightArm' : 17,
                 'leftForeArm' : 18, 'rightForeArm' : 19, 'leftHand' : 20, 'rightHand' : 21}
 SMPL_PARENTS = [-1, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 12, 12, 13, 14, 16, 17, 18, 19]
@@ -12,7 +12,8 @@ SMPL_PARENTS = [-1, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 12, 12, 12, 13, 14, 16, 
 # SMPLX_PATH = './body_models/smplx'
 # SMPL_PATH = './body_models/smpl'
 # VPOSER_PATH = './body_models/vposer_v1_0'
-SMPLH_PATH = '/hdd/zen/dev/copycat/Copycat/data/smpl/smplh/'
+# SMPLH_PATH = '/hdd/zen/dev/copycat/Copycat/data/smpl/smplh/'
+SMPLH_PATH = '/hdd/zen/data/SMPL/smpl_models/smplh/'
 SMPLX_PATH = '/hdd/zen/dev/copycat/Copycat/data/smpl/smplx/'
 SMPL_PATH = '/hdd/zen/dev/copycat/Copycat/data/smpl/smpl/'
 VPOSER_PATH = '/hdd/zen/data/SMPL/smpl_models/vposer_v1_0'
